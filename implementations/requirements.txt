@@ -1,0 +1,23 @@
+# Progent Coding Agent - Requirements
+# Tested with Python 3.11
+
+# Core dependencies
+pyyaml>=6.0
+python-dotenv>=1.0.0
+docstring_parser>=0.15
+jsonschema>=4.0.0
+pydantic>=2.0
+
+# OpenAI SDK (for OpenRouter and direct OpenAI)
+openai>=1.0.0,<2.0.0
+
+# LangChain ecosystem (0.3.x for stability)
+langchain>=0.3.0,<0.4.0
+langchain-core>=0.3.0,<0.4.0
+langchain-openai>=0.2.0,<0.3.0
+
+# Optional: Google ADK (uncomment if needed)
+# google-generativeai>=0.5.0
+
+# Progent/secagent - install from parent directory:
+# pip install -e ..

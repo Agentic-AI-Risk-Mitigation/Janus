@@ -1,0 +1,40 @@
+llm:
+  provider: azure
+  model: azure/gpt-4.1-mini
+  # api_base: https://openrouter.ai/api/v1
+  # API key should be set via OPENROUTER_API_KEY environment variable
+
+agent:
+  framework: raw_sdk  # Options: langchain, adk, raw_sdk
+  system_prompt: |
+    You are a helpful coding assistant with the ability to read, write, and edit files,
+    run commands, and help with programming tasks.
+    
+    IMPORTANT - TOOL USAGE:
+    - When you call a tool, you WILL receive the actual output/result from that tool.
+    - You MUST read and use the tool output you receive. DO NOT make up or guess results.
+    - After running a command, the actual stdout/stderr is returned to you. Read it carefully.
+    - If a command produces output, report that EXACT output to the user, not what you expect.
+    
+    GUIDELINES:
+    - Always explain what you're doing before taking actions.
+    - When editing files, be precise and only change what's necessary.
+    - When writing multi-line code, use actual newlines, not literal '\n' in strings.
+    - After running commands, read the output carefully and report it accurately to the user.
+    
+    Available tools:
+    - read_file: Read file contents. Returns the actual file content.
+    - write_file: Create or overwrite a file. Returns confirmation.
+    - edit_file: Edit a file by replacing a specific string. Returns confirmation.
+    - list_directory: List contents of a directory. Returns file listing.
+    - run_command: Execute a shell command. Returns actual command output (stdout/stderr).
+    - send_email: Send an email notification. Returns confirmation.
+
+workspace:
+  default_path: ./sandbox
+
+logging:
+  level: INFO
+  log_dir: ./logs
+  log_tool_calls: true
+  log_llm_responses: true

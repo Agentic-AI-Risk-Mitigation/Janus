@@ -1,0 +1,96 @@
+{
+  "read_file": [
+    {
+      "priority": 100,
+      "effect": 0,
+      "conditions": {
+        "file_path": {
+          "type": "string",
+          "pattern": "^(?!.*\\.env)(?!.*\\.secret)(?!.*credentials)(?!.*passwd)(?!.*shadow).*$"
+        }
+      },
+      "fallback": 1
+    }
+  ],
+  "write_file": [
+    {
+      "priority": 100,
+      "effect": 0,
+      "conditions": {
+        "file_path": {
+          "type": "string",
+          "pattern": "^(?!.*\\.env)(?!.*\\.secret).*$"
+        }
+      },
+      "fallback": 1
+    }
+  ],
+  "run_command": [
+    {
+      "priority": 100,
+      "effect": 0,
+      "conditions": {
+        "command": {
+          "type": "string",
+          "pattern": "^(?!.*rm .* -rf)(?!.*rm .* -r)(?!.*sudo)(?!.*chmod)(?!.*\\bdel\\b)(?!.*\\brmdir\\b)(?!.*\\brd\\b).*$"
+        }
+      },
+      "fallback": 1
+    }
+  ],
+  "send_email": [
+    {
+      "priority": 100,
+      "effect": 1,
+      "conditions": {},
+      "fallback": 1
+    }
+  ],
+  "fetch_url": [
+    {
+      "priority": 100,
+      "effect": 0,
+      "conditions": {
+        "url": {
+          "type": "string",
+          "pattern": "^(http://github.com/.*|http://internal/.*)$"
+        }
+      },
+      "fallback": 1
+    }
+  ],
+  "pip_install": [
+    {
+      "priority": 100,
+      "effect": 0,
+      "conditions": {
+        "package_name": {
+          "type": "string",
+          "pattern": "^(requests|pandas|numpy|matplotlib)$"
+        }
+      },
+      "fallback": 1
+    }
+  ],
+  "git_clone": [
+    {
+      "priority": 100,
+      "effect": 0,
+      "conditions": {
+        "repo_url": {
+          "type": "string",
+          "pattern": "^(http://github.com/.*|http://internal/.*)$"
+        }
+      },
+      "fallback": 1
+    }
+  ],
+  "list_directory": [
+    {
+      "priority": 100,
+      "effect": 0,
+      "conditions": {},
+      "fallback": 0
+    }
+  ]
+}

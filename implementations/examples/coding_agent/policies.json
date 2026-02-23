@@ -1,0 +1,65 @@
+{
+  "read_file": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {},
+      "fallback": 0
+    }
+  ],
+  "list_directory": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {},
+      "fallback": 0
+    }
+  ],
+  "write_file": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {
+        "file_path": {
+          "type": "string",
+          "pattern": "^(?!.*\\.env)(?!.*\\.secret)(?!.*credentials).*$"
+        }
+      },
+      "fallback": 0
+    }
+  ],
+  "edit_file": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {
+        "file_path": {
+          "type": "string",
+          "pattern": "^(?!.*\\.env)(?!.*\\.secret)(?!.*credentials).*$"
+        }
+      },
+      "fallback": 0
+    }
+  ],
+  "run_command": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {
+        "command": {
+          "type": "string",
+          "pattern": "^(ls|dir|cat|type|pwd|cd|echo|python|python3|pip|pip3|npm|npx|node|git|mkdir|touch|cp|mv|head|tail|grep|find|wc|sort|uniq)( .*)?$"
+        }
+      },
+      "fallback": 0
+    }
+  ],
+  "send_email": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {},
+      "fallback": 0
+    }
+  ]
+}
