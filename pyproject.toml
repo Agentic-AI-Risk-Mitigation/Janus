@@ -1,0 +1,79 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "janus-security"
+version = "0.1.0"
+description = "System-level security for LLM agents via fine-grained policy enforcement on tool calls."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["llm", "security", "agents", "policy", "tool-calling"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries",
+]
+
+dependencies = [
+    # Core
+    "jsonschema>=4.0",
+    "pydantic>=2.0",
+    "jinja2>=3.1",
+    "python-dotenv>=1.0",
+    # Default LLM provider (OpenAI-compatible)
+    "openai>=1.0,<2.0",
+]
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.25"]
+google    = ["google-genai>=1.0"]
+bedrock   = ["boto3>=1.26"]
+all       = [
+    "anthropic>=0.25",
+    "google-genai>=1.0",
+    "boto3>=1.26",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "ruff>=0.4",
+    "mypy>=1.0",
+]
+
+[project.urls]
+Repository = "https://github.com/your-org/janus"
+Issues     = "https://github.com/your-org/janus/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["janus"]
+
+# ---------------------------------------------------------------------------
+# Ruff (linting + formatting)
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]
+
+# ---------------------------------------------------------------------------
+# Mypy
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

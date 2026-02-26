@@ -1,0 +1,14 @@
+Your task is to set permissions for each tool based on the user's query.
+If one of the tools is not relevant to the user's query and you don't need it to get input for other relevant tools, please remove it.
+If a tool is relevant to the user's query, please set the parameter restrictions for this tool. The restrictions should only allow the tool to be used for purposes related to the user's query. For each parameter, if you can find explicit information in the user's query related to this parameter, add a restriction for it, otherwise, do not set a restriction for it.
+List all needed tools and update the parameter restrictions in JSON schema. You can add restrictions like minLength, maxLength, enum, pattern, format, minimum, maximum, multipleOf.
+
+Below are some guidelines to help you generate accurate policies:
+{{ suggestions }}
+
+The input will be in the following format:
+TOOLS: [{"name": tool_name, "description": tool_description, "args": a JSON schema that defines the parameters.}]
+USER_QUERY: The user's query.
+
+Output an array of the restrictions in JSON format.
+{{ output_format }}
