@@ -10,21 +10,41 @@ Janus intercepts every tool call an LLM agent makes and validates it against a s
 
 ## Table of Contents
 
-- [Features](#features)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Policy Format](#policy-format)
-- [LLM Providers](#llm-providers)
-- [Built-in Tools](#built-in-tools)
-- [Custom Tools](#custom-tools)
-- [LLM-Generated Policies](#llm-generated-policies)
-- [Framework Adapters](#framework-adapters)
-  - [LangChain](#langchain)
-  - [Google ADK (Gemini)](#google-adk-gemini)
-- [Standalone Policy Enforcement](#standalone-policy-enforcement)
-- [Runtime Policy Management](#runtime-policy-management)
-- [Error Handling](#error-handling)
-- [Project Structure](#project-structure)
+- [Janus](#janus)
+  - [Table of Contents](#table-of-contents)
+  - [Features](#features)
+  - [Installation](#installation)
+  - [Quick Start](#quick-start)
+    - [`JanusAgent` Parameters](#janusagent-parameters)
+    - [`JanusAgent` Methods](#janusagent-methods)
+  - [Policy Format](#policy-format)
+    - [Full Format](#full-format)
+    - [Shorthand Format (conditions only)](#shorthand-format-conditions-only)
+    - [Policy Rule Fields](#policy-rule-fields)
+    - [Condition Schemas](#condition-schemas)
+    - [Evaluation Logic](#evaluation-logic)
+  - [LLM Providers](#llm-providers)
+  - [Built-in Tools](#built-in-tools)
+    - [File Tools](#file-tools)
+    - [Command Tools](#command-tools)
+  - [Custom Tools](#custom-tools)
+    - [`ToolParam` Fields](#toolparam-fields)
+  - [LLM-Generated Policies](#llm-generated-policies)
+    - [Standalone Policy Generation](#standalone-policy-generation)
+    - [Policy Refinement](#policy-refinement)
+  - [Framework Adapters](#framework-adapters)
+    - [LangChain](#langchain)
+      - [Depth 1 — Convert `ToolDef` list to secured `StructuredTool` list](#depth-1--convert-tooldef-list-to-secured-structuredtool-list)
+      - [Depth 2 — Wrap existing LangChain tools](#depth-2--wrap-existing-langchain-tools)
+      - [Depth 3 — `JanusLangChainAgent` (turnkey)](#depth-3--januslangchainagent-turnkey)
+    - [Google ADK (Gemini)](#google-adk-gemini)
+      - [Depth 1 — Convert `ToolDef` list to ADK-native types](#depth-1--convert-tooldef-list-to-adk-native-types)
+      - [Depth 2 — `JanusADKAgent` (turnkey)](#depth-2--janusadkagent-turnkey)
+  - [Standalone Policy Enforcement](#standalone-policy-enforcement)
+  - [Runtime Policy Management](#runtime-policy-management)
+  - [Error Handling](#error-handling)
+  - [Project Structure](#project-structure)
+  - [License](#license)
 
 ---
 
@@ -46,6 +66,8 @@ Janus intercepts every tool call an LLM agent makes and validates it against a s
 ---
 
 ## Installation
+
+[Note: uv package is not implemented yet]
 
 Requires Python ≥ 3.11. [uv](https://docs.astral.sh/uv/) is the recommended package manager.
 
