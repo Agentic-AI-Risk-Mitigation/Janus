@@ -78,6 +78,11 @@ Standalone policy enforcement (for framework integrations)
 """
 
 from janus.agent import JanusAgent
+
+# Adapters are imported lazily (optional dependencies) — access via submodule:
+#   from janus.adapters.langchain import secure_langchain_tools, JanusLangChainAgent
+#   from janus.adapters.adk import secure_adk_tools, JanusADKAgent
+
 from janus.exceptions import (
     ArgumentValidationError,
     JanusError,
