@@ -239,11 +239,11 @@ def _evaluate_rules(
     # No rule matched at all → default deny
     if skipped_reasons:
         reason = (
-            f"Tool '{tool_name}' blocked — no matching allow rule. Details:\n  "
+            f"Tool '{tool_name}' blocked - no matching allow rule. Details:\n  "
             + "\n  ".join(skipped_reasons)
         )
     else:
-        reason = f"Tool '{tool_name}' blocked — no policy rule matched the provided arguments."
+        reason = f"Tool '{tool_name}' blocked - no policy rule matched the provided arguments."
 
     raise PolicyViolation(tool_name=tool_name, arguments=arguments, reason=reason)
 

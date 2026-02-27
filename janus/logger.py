@@ -118,7 +118,16 @@ def configure_logging(
     logger.handlers.clear()
     logger.propagate = False  # avoid duplicates when root logger is configured
 
-    console = logging.StreamHandler(sys.stdout)
+    # Wrap stdout with UTF-8 encoding on Windows to prevent mojibake on
+    # non-ASCII characters in policy / tool-call messages.
+    import io
+    stdout_utf8 = io.TextIOWrapper(
+        sys.stdout.buffer if hasattr(sys.stdout, "buffer") else sys.stdout,
+        encoding="utf-8",
+        errors="replace",
+        line_buffering=True,
+    ) if hasattr(sys.stdout, "buffer") else sys.stdout
+    console = logging.StreamHandler(stdout_utf8)
     console.setFormatter(logging.Formatter(fmt))
     logger.addHandler(console)
 

@@ -258,7 +258,12 @@ class JanusLangChainAgent:
         **provider_kwargs: Any,
     ):
         _require_langchain()
-        from langchain.agents import AgentExecutor, create_tool_calling_agent
+        # AgentExecutor moved between LangChain versions; try both locations
+        try:
+            from langchain.agents import AgentExecutor, create_tool_calling_agent
+        except ImportError:
+            from langchain_core.agents import AgentExecutor  # type: ignore[no-redef]
+            from langchain_core.agents import create_tool_calling_agent  # type: ignore[no-redef]
         from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
         self.enforcer = resolve_enforcer(policy)
