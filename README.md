@@ -55,6 +55,7 @@ Janus intercepts every tool call an LLM agent makes and validates it against a s
 - **Multiple policy sources** — load from a JSON file, a Python dict, or auto-generate with an LLM
 - **LLM-generated policies** — automatically infer minimum-privilege policies from a user's query
 - **Policy refinement** — incrementally tighten policies as the agent discovers information during a task
+- **Graph-based capability surfacing** — seamless integration with the SpiceDB-backed `Policy-Discovery-Engine` for advanced runtime taint tracking and authorization
 - **Built-in tools** — ready-to-use file system and command execution tools with workspace sandboxing
 - **Custom tools** — define your own tools with `ToolDef` / `ToolParam`; Janus guards them automatically
 - **10+ LLM providers** — OpenAI, Anthropic, Google Gemini, Azure OpenAI, AWS Bedrock, Ollama, vLLM, Together AI, OpenRouter
@@ -131,6 +132,8 @@ print(response)
 | `use_builtin_tools` | `bool` | `True` | Register built-in file and command tools |
 | `policy` | `str \| Path \| dict \| None` | `None` | Policy source (file path, dict, `"generate"`, or `None`) |
 | `policy_model` | `str \| None` | `"gpt-4o-2024-08-06"` | Model used for LLM-based policy generation |
+| `policy_engine`| `str` | `"janus"` | Enforcer engine to use (`"janus"` or `"pde"`) |
+| `agent_role`   | `str` | `"coding_agent"` | The role assessed during `pde` taint tracking |
 | `api_key` | `str \| None` | `None` | API key (falls back to provider's env var) |
 | `workspace` | `str \| Path \| None` | `cwd` | Root directory for file-system tools |
 | `max_tool_iterations` | `int` | `10` | Max tool-call cycles per `run()` call |
@@ -151,6 +154,7 @@ print(response)
 | `add_tool(tool)` | Register an additional tool at runtime |
 | `remove_tool(name)` | Unregister a tool by name |
 | `list_tools()` | Return names of all registered tools |
+| `update_taint(risk)` | Update session taint risk monotonically (PDE engine only) |
 
 ---
 
