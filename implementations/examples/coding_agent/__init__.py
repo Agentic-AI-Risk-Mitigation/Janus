@@ -1,1 +1,0 @@
-# Coding agent example
