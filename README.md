@@ -55,7 +55,7 @@ Janus intercepts every tool call an LLM agent makes and validates it against a s
 - **Multiple policy sources** — load from a JSON file, a Python dict, or auto-generate with an LLM
 - **LLM-generated policies** — automatically infer minimum-privilege policies from a user's query
 - **Policy refinement** — incrementally tighten policies as the agent discovers information during a task
-- **Graph-based capability surfacing** — seamless integration with the SpiceDB-backed `Policy-Discovery-Engine` for advanced runtime taint tracking and authorization
+- **Graph-based capability surfacing** — seamless integration with the SpiceDB-backed `Policy-Discovery-Engine` for ReBAC access control and runtime taint tracking (IPI defence)
 - **Built-in tools** — ready-to-use file system and command execution tools with workspace sandboxing
 - **Custom tools** — define your own tools with `ToolDef` / `ToolParam`; Janus guards them automatically
 - **10+ LLM providers** — OpenAI, Anthropic, Google Gemini, Azure OpenAI, AWS Bedrock, Ollama, vLLM, Together AI, OpenRouter
@@ -673,7 +673,7 @@ janus/
 Policy-Discovery-Engine/
 ├── policy_engine/
 │   ├── main.py               # SpiceDB Bootstrap schema & edge mapping 
-│   ├── enforcement.py        # GraphInterceptor for taint-aware tool checking
+│   ├── enforcement.py        # GraphInterceptor — taint gate + SpiceDB ACL check
 │   ├── schema.zed            # The native Zanzibar schema logic
 │   ├── caveats.py            # Caveats evaluation implementation
 │   └── discovery.py          # Graph policy discovery logic
@@ -681,6 +681,28 @@ Policy-Discovery-Engine/
 ├── demo.ipynb                # A walkthrough notebook exploring PDE internals
 └── README.md                 # Standalone PDE architecture documentation
 ```
+
+---
+
+## Running the E2E Integration Test
+
+The end-to-end test spins up a real SpiceDB instance via Docker and validates the full Janus + PDE integration — schema bootstrap, role-based ACL enforcement, and taint-based blocking.
+
+**Prerequisites:** Docker installed and running.
+
+```bash
+# The test manages Docker automatically; just run:
+uv run pytest test_e2e_pde.py -v -s
+
+# To manually stop the container afterwards:
+docker compose -f Policy-Discovery-Engine/docker-compose.yml stop
+```
+
+**What is tested:**
+- ACL-granted tools (readonly, developer, executor roles) pass at low taint
+- Python taint gate blocks tools when `current_taint > TOOL_TAINT_LIMIT[tool]`
+- Tier-4 tools (`bash_terminal`, `http_request`, `write_secret`, etc.) are permanently denied by SpiceDB — no ACL edges exist for them
+- Full IPI scenario: agent reads a critical-risk source → taint jumps → dangerous write operations blocked, safe reads still pass
 
 ---
 
