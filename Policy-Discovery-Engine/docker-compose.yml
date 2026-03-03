@@ -1,0 +1,8 @@
+version: '3'
+services:
+  spicedb:
+    image: authzed/spicedb:latest
+    ports:
+      - "50051:50051"
+      - "8443:8443"
+    command: serve --grpc-preshared-key "somerandomkey" --readonly-grpc-preshared-key "readonlykey"

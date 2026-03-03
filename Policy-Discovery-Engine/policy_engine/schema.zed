@@ -1,0 +1,36 @@
+definition user {}
+
+definition repository {
+    relation viewer: user | agent
+    relation contributor: user | agent
+    
+    # 0 = Safe, 100 = Malicious
+    relation risk_level: risk_score
+}
+
+definition risk_score {}
+
+definition agent {
+    relation owner: user
+    relation assigned_role: role
+}
+
+definition role {
+    relation member: agent
+}
+
+definition tool {
+    relation viewer: role
+    relation can_execute: role
+    
+    # The Advanced IPI Defense
+    # Permission granted ONLY if the context risk is below threshold
+    permission call = can_execute & risk_check
+    
+    # Logic: Allowed Risk Threshold >= Current Context Risk
+    permission risk_check = can_execute with check_taint
+}
+
+caveat check_taint(current_taint int, max_allowed_taint int) {
+    current_taint <= max_allowed_taint
+}
