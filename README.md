@@ -653,6 +653,7 @@ janus/
 │
 ├── policy/
 │   ├── enforcer.py           # PolicyEnforcer — rule evaluation engine
+│   ├── pde_enforcer.py       # PDEEnforcer — Graph and taint evaluation wrapper
 │   ├── generator.py          # LLM-based policy generation & refinement
 │   ├── loader.py             # JSON parsing and policy persistence
 │   └── validator.py          # JSON Schema argument validation
@@ -668,6 +669,17 @@ janus/
     ├── _base.py              # Shared adapter utilities
     ├── langchain.py          # LangChain integration
     └── adk.py                # Google ADK (Gemini) integration
+
+Policy-Discovery-Engine/
+├── policy_engine/
+│   ├── main.py               # SpiceDB Bootstrap schema & edge mapping 
+│   ├── enforcement.py        # GraphInterceptor for taint-aware tool checking
+│   ├── schema.zed            # The native Zanzibar schema logic
+│   ├── caveats.py            # Caveats evaluation implementation
+│   └── discovery.py          # Graph policy discovery logic
+├── docker-compose.yml        # Config to spin up local SpiceDB test instances
+├── demo.ipynb                # A walkthrough notebook exploring PDE internals
+└── README.md                 # Standalone PDE architecture documentation
 ```
 
 ---
