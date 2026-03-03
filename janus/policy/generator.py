@@ -259,16 +259,17 @@ def _call_llm(
     # Google Gemini
     if model.startswith("gemini"):
         try:
-            import vertexai.generative_models as genai
+            import google.genai as google_genai
         except ImportError:
-            raise ImportError("Install google-cloud-aiplatform: uv add google-cloud-aiplatform")
-        m = genai.GenerativeModel(
-            model_name=model,
-            system_instruction=genai.Part.from_text(text=sys_prompt),
-        )
-        resp = m.generate_content(
-            [genai.Content(role="user", parts=[genai.Part.from_text(user_content)])],
-            generation_config=genai.GenerationConfig(temperature=temperature),
+            raise ImportError("Install google-genai: uv add google-genai")
+        client = google_genai.Client(api_key=api_key or os.environ.get("GOOGLE_API_KEY"))
+        resp = client.models.generate_content(
+            model=model,
+            contents=user_content,
+            config=google_genai.types.GenerateContentConfig(
+                system_instruction=sys_prompt,
+                temperature=temperature,
+            ),
         )
         return resp.text
 
@@ -376,9 +377,22 @@ def _to_internal_format(generated: list[dict]) -> dict:
 
     Generated rules are assigned priority 100 to distinguish them from
     manually defined rules (priority < 100).
+
+    Handles both list-of-dicts (canonical) and dict-keyed-by-tool-name
+    shapes that some LLMs return.
     """
+    if isinstance(generated, dict):
+        generated = [{"name": k, "args": v} for k, v in generated.items()]
+    elif not isinstance(generated, list):
+        _logger.warning(
+            "Unexpected policy format from LLM: %s. Skipping.", type(generated).__name__
+        )
+        return {}
+
     internal: dict[str, list] = {}
     for item in generated:
+        if not isinstance(item, dict):
+            continue
         tool_name = item.get("name")
         if not tool_name:
             continue

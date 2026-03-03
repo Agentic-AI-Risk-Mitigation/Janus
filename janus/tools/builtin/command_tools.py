@@ -5,6 +5,8 @@ All commands run with the current workspace as the working directory.
 """
 
 import subprocess
+import urllib.error
+import urllib.request
 from typing import Optional
 
 from janus.tools.builtin.file_tools import get_workspace
@@ -58,4 +60,10 @@ def fetch_url(url: str) -> str:
     :param url: The URL to fetch.
     :return: The fetched content.
     """
-    return run_command(f'curl -s "{url}"')
+    try:
+        with urllib.request.urlopen(url, timeout=30) as response:
+            return response.read().decode("utf-8", errors="replace")
+    except urllib.error.URLError as exc:
+        return f"URL fetch failed: {exc}"
+    except Exception as exc:
+        return f"URL fetch failed: {type(exc).__name__}: {exc}"

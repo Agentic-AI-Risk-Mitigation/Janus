@@ -20,6 +20,7 @@ Policy format (internal):
 """
 
 import sys
+from os import PathLike
 from typing import Any
 
 from janus.exceptions import ArgumentValidationError, PolicyViolation

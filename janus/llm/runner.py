@@ -141,7 +141,17 @@ class LLMRunner:
             )
             assistant_msg = response.choices[0].message
 
-        final = assistant_msg.content or "No response generated."
+        if iteration >= self._max_iterations and assistant_msg.tool_calls:
+            final = (
+                f"Maximum tool iterations ({self._max_iterations}) reached; "
+                "no final response was generated."
+            )
+            self._logger.warning(
+                f"Max tool iterations ({self._max_iterations}) reached without a final text response."
+            )
+        else:
+            final = assistant_msg.content or "No response generated."
+
         self._messages.append({"role": "assistant", "content": final})
         self._logger.agent_event("RESPONSE", final[:120])
         return final

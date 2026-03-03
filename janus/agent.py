@@ -295,6 +295,7 @@ class JanusAgent:
                 self._logger.warning("Policy generation returned an empty policy.")
         except PolicyGenerationError as exc:
             self._logger.error(f"Policy generation failed: {exc}")
+            raise
 
 
 def _parse_model_string(model: str) -> tuple[str, str]:
