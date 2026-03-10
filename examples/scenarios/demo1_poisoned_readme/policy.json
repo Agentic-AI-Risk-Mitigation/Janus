@@ -1,0 +1,36 @@
+{
+  "list_directory": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {},
+      "fallback": 0
+    }
+  ],
+  "read_file": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {
+        "file_path": {
+          "type": "string",
+          "pattern": "^(?!.*\\.env).*$"
+        }
+      },
+      "fallback": 0
+    }
+  ],
+  "fetch_url": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {
+        "url": {
+          "type": "string",
+          "pattern": "^https://trusted-registry\\.example\\.com/.*"
+        }
+      },
+      "fallback": 0
+    }
+  ]
+}
