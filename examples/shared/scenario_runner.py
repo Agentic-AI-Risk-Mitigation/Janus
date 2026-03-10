@@ -86,7 +86,18 @@ class ScenarioRunner:
         enforcer = None
         if protected:
             if scenario.enforcer_type == "pde":
-                enforcer = self._setup_pde_enforcer(scenario)
+                try:
+                    enforcer = self._setup_pde_enforcer(scenario)
+                except Exception as exc:
+                    await event_callback(SystemEvent(
+                        panel=panel,
+                        message=(
+                            f"⚠️  SpiceDB/PDE not available: {exc}\n"
+                            "Start SpiceDB with: docker compose up -d\n"
+                            "Running unprotected instead."
+                        ),
+                    ))
+                    enforcer = None
             else:
                 policy = scenario.get_policy()
                 enforcer = resolve_enforcer(policy)
