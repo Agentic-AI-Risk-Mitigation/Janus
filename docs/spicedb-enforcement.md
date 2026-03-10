@@ -65,23 +65,15 @@ Tools are grouped by risk. Tier 4 tools have no ACL edges and are always denied.
 1. Start SpiceDB (Docker):
 
    ```bash
-   docker compose -f janus/pde/docker-compose.yml up -d
+   cd demos && docker compose up -d && cd ..
    ```
 
-2. Bootstrap the schema and relationships (run once per SpiceDB instance):
+2. Use the engine via the demo scenario or Janus: Demo 5 bootstraps the demo schema and relationships when you run it (web app or `uv run python -m examples.run demo5_taint_cascade --protected`). The PDE code lives in `Policy-Discovery-Engine/policy_engine/`; `janus.policy.pde_enforcer.PDEEnforcer` wraps `GraphInterceptor` and uses a sync gRPC client so it works inside an asyncio event loop (e.g. uvicorn).
 
-   ```bash
-   uv run python -m janus.pde.main
-   ```
+3. Call `agent.update_taint(risk)` (or the scenario’s taint callback) when the agent reads from risky sources (e.g. after `fetch_url` or reading untrusted files).
 
-3. Use `policy_engine="pde"` in `JanusAgent`. Call `agent.update_taint(risk)` when the agent reads from risky sources (e.g. after `read_file` on an untrusted path, or `fetch_url`).
+4. Run the example tests: `uv run pytest tests/test_examples/ -v`.
 
-4. E2E test:
+## Layout
 
-   ```bash
-   uv run pytest test_e2e_pde.py -v -s
-   ```
-
-## Post-Merge Layout
-
-The SpiceDB engine code lives under `janus/pde/` (or `janus/policy/spicedb/`). It remains optional; the default engine is the JSON Schema enforcer. The config key `policy_engine="pde"` may be renamed to `policy_engine="spicedb"` in a future release.
+The SpiceDB engine lives under `Policy-Discovery-Engine/policy_engine/` (enforcement, schema, bootstrap). The Janus adapter is `janus/policy/pde_enforcer.py`, which imports `GraphInterceptor` from the PDE and uses a sync gRPC client so enforcement works under uvicorn. The default engine remains the JSON Schema enforcer; PDE is optional.

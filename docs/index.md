@@ -35,6 +35,6 @@ Janus supports two engines:
 
 ## Quick Demo
 
-Run the demo in under 5 minutes: [Demo →](demo.md)
+Run the web app or CLI scenarios in under 5 minutes: [Demo →](demo.md)
 
 [Get started →](getting-started.md)

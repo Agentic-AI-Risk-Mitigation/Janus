@@ -77,7 +77,7 @@ Janus sits between the LLM agent and its tools. Every tool call is intercepted, 
 - **Schema divergence**: The SpiceDB schema in `main.py` and `schema.zed` have diverged; `schema.zed` is not used at runtime.
 - **LLM-generated policies**: Effective but not provably complete. Manual policies can be crafted for provable coverage; LLM-generated ones reduce attack surface but may miss edge cases.
 
-## Project Structure (Post-Merge)
+## Project Structure
 
 ```
 janus/
@@ -100,8 +100,19 @@ janus/
 ├── adapters/
 │   ├── langchain.py
 │   └── adk.py
-└── pde/                  # SpiceDB-backed enforcement (optional)
-    ├── enforcement.py
-    ├── main.py           # Schema, bootstrap
-    └── ...
+examples/                  # Demo scenario framework
+├── shared/                # Events, mock tools, scripted LLM, scenario runner
+├── scenarios/             # demo1_poisoned_readme, demo5_taint_cascade, ...
+├── config.yaml
+└── run.py                 # CLI: python -m examples.run <scenario> [--protected|--unprotected]
+demos/                     # Web app
+├── app.py                 # FastAPI + WebSocket
+├── static/index.html
+├── docker-compose.yml     # SpiceDB for Demo 5
+└── README.md
+Policy-Discovery-Engine/   # SpiceDB-backed enforcement (optional)
+├── policy_engine/
+│   ├── enforcement.py     # GraphInterceptor, _SyncClient
+│   └── main.py            # Schema, TOOL_TAINT_LIMIT, bootstrap
+└── ...
 ```

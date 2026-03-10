@@ -30,14 +30,24 @@ To build docs locally (from the project root): `uv sync --extra docs` then `uv r
 
 ## Quick Demo (Under 5 Minutes)
 
-See the attack-and-block flow:
+**Web app (split-panel, recommended):**
 
 ```bash
-export OPENAI_API_KEY="sk-..."
-uv run python examples/demo_poisoned_readme.py
+uv pip install -e ".[langchain,dev]"
+uv pip install fastapi "uvicorn[standard]" websockets pyyaml authzed grpcutil
+cd demos && docker compose up -d && cd ..   # only needed for Demo 5
+uv run uvicorn demos.app:app --reload
 ```
 
-This runs the poisoned README scenario: malicious instructions in a file, agent attempts exfiltration, Janus blocks. See [Demo](demo.md) for all scenarios.
+Open http://localhost:8000, select a scenario, and click Start Demo. See [Demo](demo.md) for details.
+
+**CLI (single scenario):**
+
+```bash
+uv run python -m examples.run demo1_poisoned_readme --protected
+```
+
+This runs the Poisoned README scenario: Janus blocks `read_file` on `.env` and `fetch_url` to attacker URLs. See [Demo](demo.md) for all scenarios and the web app.
 
 ## Minimal Example
 
@@ -60,28 +70,25 @@ Create a `policies.json` file that allows the tools your agent needs. See [Polic
 
 ## How to Run Examples
 
-Example scripts and demos live in the `examples/` directory (or as noted in the repo). To run them:
+Scenarios and the demo framework live under `examples/`. Two scenarios are implemented: `demo1_poisoned_readme` and `demo5_taint_cascade`.
 
-1. **Environment**: Set the API key for your LLM provider, e.g. `OPENAI_API_KEY` for OpenAI.
-2. **Policy file**: Examples that use a policy expect a JSON file (e.g. `policies.json`) in the project root or a path you specify.
-3. **Command**: From the project root:
+1. **Install**: From the project root, ensure dependencies are installed (see [Demo](demo.md) or `demos/README.md` for the full list, including `langchain`, `authzed`, `grpcutil` for PDE).
 
-   ```bash
-   uv run python examples/<script_name>.py
-   ```
-
-4. **SpiceDB examples**: For examples using the SpiceDB engine, start SpiceDB first:
+2. **CLI**: Run a scenario via the runner:
 
    ```bash
-   docker compose -f janus/pde/docker-compose.yml up -d
-   # Wait for SpiceDB to be ready, then run the example
-   uv run python examples/spicedb_demo.py
+   uv run python -m examples.run <scenario_name> [--protected | --unprotected]
    ```
 
-5. **E2E integration test**: The full Janus + SpiceDB integration test:
+   Example: `uv run python -m examples.run demo1_poisoned_readme --protected`
+
+3. **Demo 5 (PDE/SpiceDB)**: Start SpiceDB first:
 
    ```bash
-   uv run pytest test_e2e_pde.py -v -s
+   cd demos && docker compose up -d && cd ..
+   uv run python -m examples.run demo5_taint_cascade --protected
    ```
 
-Replace `<script_name>` with the actual example filename. If examples are added under a different path, the same pattern applies: `uv run python <path>/<script>.py`.
+4. **Web app**: Run the split-panel demo with `uv run uvicorn demos.app:app --reload` and open http://localhost:8000. See [Demo](demo.md) and `demos/README.md`.
+
+5. **Tests**: Run the example test suite with `uv run pytest tests/test_examples/ -v`.
