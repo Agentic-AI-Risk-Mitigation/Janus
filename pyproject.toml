@@ -53,6 +53,12 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.0",
 ]
+docs = [
+    "mkdocs>=1.5",
+    "mkdocs-material>=9.0",
+    "pymdown-extensions>=10.0",
+    "mkdocs-mermaid2-plugin>=0.7.0",
+]
 
 [project.urls]
 Repository = "https://github.com/your-org/janus"

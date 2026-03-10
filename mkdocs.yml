@@ -1,0 +1,28 @@
+site_name: Janus
+site_url: https://Agentic-AI-Risk-Mitigation.github.io/janus
+repo_url: https://github.com/Agentic-AI-Risk-Mitigation/janus
+docs_dir: docs
+site_dir: site
+plugins:
+  - search
+  - mermaid2
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - scheme: default
+      primary: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Demo: demo.md
+  - Policy Reference: policy-reference.md
+  - Architecture: architecture.md
+  - SpiceDB Enforcement: spicedb-enforcement.md
