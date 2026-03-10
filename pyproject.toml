@@ -29,6 +29,7 @@ dependencies = [
     "openai>=1.0,<2.0",
     "fastapi>=0.135.1",
     "uvicorn[standard]>=0.41.0",
+    "authzed>=1.24.3",
 ]
 
 [project.optional-dependencies]

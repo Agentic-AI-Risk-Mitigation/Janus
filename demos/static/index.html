@@ -1,127 +1,348 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Janus Demo</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Janus — Security Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,600;0,700;1,400&family=Syne:wght@400;700;800&display=swap" rel="stylesheet" />
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
 :root {
-  --bg: #0d1117;
-  --bg-panel: #161b22;
-  --bg-terminal: #0d1117;
-  --bg-chat: #1c2128;
-  --border: #30363d;
-  --text: #e6edf3;
+  --bg:        #07090f;
+  --surface:   #0d1117;
+  --surface-2: #161b22;
+  --surface-3: #1c2333;
+  --border:    #21262d;
+  --border-2:  #30363d;
+
+  --red:       #f85149;
+  --red-dim:   #2a1010;
+  --red-gb:    rgba(248,81,73,.18);
+  --red-b:     rgba(248,81,73,.45);
+
+  --green:     #3fb950;
+  --green-dim: #102016;
+  --green-gb:  rgba(63,185,80,.18);
+  --green-b:   rgba(63,185,80,.45);
+
+  --blue:    #58a6ff;
+  --purple:  #bc8cff;
+  --yellow:  #e3b341;
+  --cyan:    #39d0d8;
+  --orange:  #f0883e;
+
+  --text:     #e6edf3;
   --text-dim: #8b949e;
-  --green: #3fb950;
-  --red: #f85149;
-  --yellow: #d29922;
-  --blue: #58a6ff;
-  --purple: #bc8cff;
-  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-  --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+  --text-muted: #484f58;
+
+  --mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  --ui:   'Syne', sans-serif;
 }
 
-body {
-  font-family: var(--font);
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
   background: var(--bg);
   color: var(--text);
-  height: 100vh;
+  font-family: var(--mono);
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
-/* --- Header --- */
+/* ── Scrollbars ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
+
+/* ══════════════════════════════════════════════════════════
+   HEADER
+══════════════════════════════════════════════════════════ */
 .header {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 12px 20px;
+  padding: 10px 20px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
+  background: var(--surface);
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   flex-shrink: 0;
 }
 
-.header h1 {
-  font-size: 16px;
-  font-weight: 600;
-  margin-right: auto;
+.logo-icon {
+  width: 30px;
+  height: 30px;
+  background: linear-gradient(135deg, var(--blue), var(--purple));
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
 }
 
-.header select, .header button {
-  font-family: var(--font);
+.logo-name {
+  font-family: var(--ui);
+  font-weight: 800;
+  font-size: 18px;
+  background: linear-gradient(90deg, var(--blue), var(--purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.header-spacer { flex: 1; }
+
+.scenario-select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.scenario-select-wrap label {
+  font-family: var(--ui);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  white-space: nowrap;
+}
+
+#demoSelect {
+  font-family: var(--ui);
   font-size: 13px;
-  padding: 6px 14px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg);
+  font-weight: 700;
+  padding: 7px 32px 7px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-2);
+  background: var(--surface-2);
   color: var(--text);
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238b949e' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  min-width: 240px;
+  transition: border-color .2s;
 }
+#demoSelect:hover { border-color: var(--text-muted); }
+#demoSelect:focus { outline: none; border-color: var(--blue); }
 
-.header button {
-  background: var(--green);
-  color: #000;
-  border-color: var(--green);
-  font-weight: 600;
-}
-
-.header button:hover { opacity: 0.9; }
-.header button:disabled { opacity: 0.4; cursor: not-allowed; }
-
-/* --- Main split --- */
-.main {
+/* ══════════════════════════════════════════════════════════
+   SCENARIO INFO CARD
+══════════════════════════════════════════════════════════ */
+.scenario-bar {
+  padding: 12px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
   display: flex;
-  flex: 1;
-  overflow: hidden;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.panel {
+.scenario-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.scenario-title {
+  font-family: var(--ui);
+  font-weight: 800;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.scenario-desc {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  max-width: 860px;
+}
+
+.user-query {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: 7px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  color: var(--cyan);
+  margin-top: 4px;
+  align-self: flex-start;
+  max-width: 760px;
+}
+.user-query .prefix { color: var(--text-muted); font-weight: 700; white-space: nowrap; }
+
+/* ══════════════════════════════════════════════════════════
+   CONTROLS BAR
+══════════════════════════════════════════════════════════ */
+.controls-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.btn-run {
+  background: linear-gradient(135deg, var(--blue), var(--purple));
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 28px;
+  font-family: var(--ui);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: .03em;
+  cursor: pointer;
+  transition: opacity .2s, transform .1s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-run:hover { opacity: .88; }
+.btn-run:active { transform: scale(.97); }
+.btn-run:disabled { opacity: .35; cursor: not-allowed; transform: none; }
+
+.btn-reset {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  padding: 9px 18px;
+  font-family: var(--ui);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color .2s, color .2s;
+}
+.btn-reset:hover { border-color: var(--text-dim); color: var(--text); }
+.btn-reset:disabled { opacity: .35; cursor: not-allowed; }
+
+/* ══════════════════════════════════════════════════════════
+   MAIN SPLIT
+══════════════════════════════════════════════════════════ */
+.main {
   flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── Panel ── */
+.panel {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition: box-shadow .5s;
 }
 
 .panel:first-child { border-right: 1px solid var(--border); }
 
-.panel-header {
+.panel.compromised { box-shadow: inset 0 0 40px var(--red-gb); }
+.panel.safe        { box-shadow: inset 0 0 40px var(--green-gb); }
+
+/* ── Panel header ── */
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 8px 16px;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  background: var(--surface-2);
   border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
-  text-align: center;
+  flex-shrink: 0;
 }
 
-.panel-header.unprotected { color: var(--red); }
-.panel-header.protected { color: var(--green); }
+.panel-label {
+  font-family: var(--ui);
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.panel-left .panel-label  { color: var(--red); }
+.panel-right .panel-label { color: var(--green); }
 
-/* --- Chat area --- */
+.status-pill {
+  font-family: var(--ui);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border-2);
+  color: var(--text-muted);
+  transition: all .3s;
+}
+.pill-running     { color: var(--yellow); border-color: rgba(227,179,65,.4); background: rgba(227,179,65,.08); animation: blink 1.4s infinite; }
+.pill-compromised { color: var(--red);    border-color: var(--red-b);        background: var(--red-dim); }
+.pill-safe        { color: var(--green);  border-color: var(--green-b);      background: var(--green-dim); }
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+/* ── Taint meter ── */
+.taint-meter {
+  display: none;
+  padding: 5px 14px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.taint-meter.visible { display: flex; }
+.taint-bar  { flex:1; height:5px; background:var(--border-2); border-radius:3px; overflow:hidden; }
+.taint-fill { height:100%; width:0%; background:var(--green); border-radius:3px; transition:width .5s,background .5s; }
+.taint-fill.medium { background:var(--yellow); }
+.taint-fill.high   { background:var(--red); }
+.taint-label { color:var(--text-muted); min-width:72px; font-family:var(--ui); font-weight:700; }
+.taint-value { font-weight:700; min-width:28px; }
+
+/* ── Chat ── */
 .chat {
   flex: 1;
   overflow-y: auto;
   padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   min-height: 0;
 }
 
 .msg {
-  max-width: 90%;
-  padding: 10px 14px;
+  max-width: 88%;
+  padding: 9px 13px;
   border-radius: 10px;
-  font-size: 13px;
-  line-height: 1.5;
-  word-wrap: break-word;
+  font-size: 12.5px;
+  line-height: 1.55;
+  word-break: break-word;
   white-space: pre-wrap;
+  animation: fadeUp .2s ease;
 }
+
+@keyframes fadeUp { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:none} }
 
 .msg.user {
   align-self: flex-end;
@@ -129,270 +350,390 @@ body {
   color: #fff;
   border-bottom-right-radius: 3px;
 }
-
 .msg.assistant {
   align-self: flex-start;
-  background: var(--bg-chat);
-  border: 1px solid var(--border);
+  background: var(--surface-3);
+  border: 1px solid var(--border-2);
   border-bottom-left-radius: 3px;
 }
+.msg .label { font-size: 10px; font-weight: 700; margin-bottom: 4px; opacity: .65; font-family: var(--ui); }
 
-.msg .label {
-  font-size: 11px;
-  font-weight: 600;
-  margin-bottom: 4px;
-  opacity: 0.7;
-}
-
-/* --- Terminal area --- */
-.terminal-wrapper {
+/* ── Terminal ── */
+.term-wrap {
   flex-shrink: 0;
-  height: 200px;
+  height: 195px;
   border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
 }
 
-.terminal-header {
+.term-head {
   padding: 4px 12px;
   font-size: 11px;
   font-weight: 600;
-  color: var(--text-dim);
-  background: var(--bg-panel);
+  color: var(--text-muted);
+  background: var(--surface-2);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
+  font-family: var(--ui);
+  text-transform: uppercase;
+  letter-spacing: .07em;
 }
 
-.terminal-header .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--green);
-}
+.term-dot { width:7px; height:7px; border-radius:50%; background:var(--green); }
+.panel-left  .term-dot { background: var(--red); }
+.panel-right .term-dot { background: var(--green); }
 
 .terminal {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 12px;
+  padding: 7px 12px;
   font-family: var(--mono);
-  font-size: 12px;
-  line-height: 1.6;
-  background: var(--bg-terminal);
+  font-size: 11.5px;
+  line-height: 1.65;
+  background: #010409;
 }
 
-.terminal .line { margin-bottom: 2px; }
-.terminal .tool-call { color: var(--blue); }
-.terminal .tool-call::before { content: '> '; color: var(--text-dim); }
-.terminal .tool-result { color: var(--text-dim); padding-left: 14px; }
-.terminal .allow { color: var(--green); }
-.terminal .block { color: var(--red); font-weight: 600; }
-.terminal .attack { color: var(--red); font-weight: 700; background: rgba(248, 81, 73, 0.1); padding: 2px 6px; border-radius: 3px; }
-.terminal .taint { color: var(--yellow); }
-.terminal .system { color: var(--text-dim); font-style: italic; }
+.line { margin-bottom: 1px; animation: fadeIn .15s ease; }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
 
-/* --- Taint meter (for Demo 5) --- */
-.taint-meter {
+.tool-call   { color: var(--blue); }
+.tool-call::before { content: '❯ '; color: var(--text-muted); }
+.tool-result { color: var(--text-muted); padding-left: 14px; }
+.allow       { color: var(--green); }
+.block       { color: var(--red); font-weight: 700; }
+.attack      { color: var(--red); font-weight: 700; background: var(--red-gb); padding: 1px 6px; border-radius: 3px; }
+.taint-line  { color: var(--yellow); }
+.sys         { color: var(--text-muted); font-style: italic; }
+
+/* ── Outcome banner ── */
+.outcome {
   display: none;
-  padding: 6px 12px;
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border);
-  font-size: 11px;
-  align-items: center;
-  gap: 8px;
+  padding: 10px 16px;
+  text-align: center;
+  font-family: var(--ui);
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+  animation: fadeUp .4s ease;
 }
-
-.taint-meter.visible { display: flex; }
-
-.taint-bar {
-  flex: 1;
-  height: 6px;
-  background: var(--border);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.taint-fill {
-  height: 100%;
-  width: 0%;
-  background: var(--green);
-  border-radius: 3px;
-  transition: width 0.5s ease, background 0.5s ease;
-}
-
-.taint-fill.medium { background: var(--yellow); }
-.taint-fill.high { background: var(--red); }
-
-.taint-label { color: var(--text-dim); min-width: 70px; }
-.taint-value { font-family: var(--mono); font-weight: 600; min-width: 30px; }
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.outcome.compromised { display:block; background:linear-gradient(135deg,var(--red-dim),#1a0a0a); color:var(--red); border-top:1px solid var(--red-b); }
+.outcome.safe        { display:block; background:linear-gradient(135deg,var(--green-dim),#0a1a0c); color:var(--green); border-top:1px solid var(--green-b); }
 </style>
 </head>
 <body>
 
+<!-- ══ Header ══════════════════════════════════════════════════════════ -->
 <div class="header">
-  <h1>JANUS DEMO</h1>
-  <select id="demoSelect"></select>
-  <button id="startBtn" onclick="startDemo()">Start Demo</button>
+  <div class="logo">
+    <div class="logo-icon">🛡</div>
+    <span class="logo-name">Janus</span>
+  </div>
+  <div class="header-spacer"></div>
+  <div class="scenario-select-wrap">
+    <label for="demoSelect">Demo</label>
+    <select id="demoSelect" onchange="onScenarioChange()"></select>
+  </div>
 </div>
 
+<!-- ══ Scenario info card ══════════════════════════════════════════════ -->
+<div class="scenario-bar">
+  <div class="scenario-title-row">
+    <span class="scenario-title" id="scenarioTitle">Loading scenarios…</span>
+  </div>
+  <div class="scenario-desc" id="scenarioDesc"></div>
+  <div class="user-query" id="userQueryBox" style="display:none">
+    <span class="prefix">👤 Developer:</span>
+    <span id="userQueryText"></span>
+  </div>
+</div>
+
+<!-- ══ Controls ════════════════════════════════════════════════════════ -->
+<div class="controls-bar">
+  <button class="btn-run" id="startBtn" onclick="startDemo()">▶ Run Demo</button>
+  <button class="btn-reset" id="resetBtn" onclick="resetDemo()">↺ Reset</button>
+</div>
+
+<!-- ══ Main split ════════════════════════════════════════════════════ -->
 <div class="main">
-  <!-- Left panel: WITHOUT JANUS -->
-  <div class="panel" id="panelLeft">
-    <div class="panel-header unprotected">Without Janus</div>
+
+  <!-- Left: Without Janus -->
+  <div class="panel panel-left" id="panelLeft">
+    <div class="panel-head">
+      <span class="panel-label">⚠ Without Janus</span>
+      <span class="status-pill" id="pillLeft">READY</span>
+    </div>
     <div class="chat" id="chatLeft"></div>
-    <div class="terminal-wrapper">
-      <div class="terminal-header"><span class="dot"></span> Agent Trace</div>
+    <div class="term-wrap">
+      <div class="term-head"><span class="term-dot"></span>Agent Trace</div>
       <div class="terminal" id="termLeft"></div>
     </div>
+    <div class="outcome" id="outcomeLeft"></div>
   </div>
 
-  <!-- Right panel: WITH JANUS -->
-  <div class="panel" id="panelRight">
-    <div class="panel-header protected">With Janus</div>
+  <!-- Right: With Janus -->
+  <div class="panel panel-right" id="panelRight">
+    <div class="panel-head">
+      <span class="panel-label">🛡 With Janus</span>
+      <span class="status-pill" id="pillRight">READY</span>
+    </div>
     <div class="taint-meter" id="taintMeter">
-      <span class="taint-label">Taint Level:</span>
+      <span class="taint-label">Taint</span>
       <div class="taint-bar"><div class="taint-fill" id="taintFill"></div></div>
       <span class="taint-value" id="taintValue">0</span>
     </div>
     <div class="chat" id="chatRight"></div>
-    <div class="terminal-wrapper">
-      <div class="terminal-header"><span class="dot"></span> Janus Enforcement Log</div>
+    <div class="term-wrap">
+      <div class="term-head"><span class="term-dot"></span>Janus Enforcement Log</div>
       <div class="terminal" id="termRight"></div>
     </div>
+    <div class="outcome" id="outcomeRight"></div>
   </div>
-</div>
+
+</div><!-- /.main -->
 
 <script>
 const WS_URL = `ws://${location.host}/ws`;
 let ws = null;
+let _scenarios = [];
+
+// ── Scenario loading ─────────────────────────────────────────────────
 
 async function loadScenarios() {
-  const resp = await fetch('/api/scenarios');
-  const scenarios = await resp.json();
-  const sel = document.getElementById('demoSelect');
-  sel.innerHTML = '';
-  for (const s of scenarios) {
-    const opt = document.createElement('option');
-    opt.value = s.name;
-    opt.textContent = `${s.title}`;
-    sel.appendChild(opt);
+  try {
+    const resp = await fetch('/api/scenarios');
+    _scenarios = await resp.json();
+    const sel = document.getElementById('demoSelect');
+    sel.innerHTML = '';
+    for (const s of _scenarios) {
+      const opt = document.createElement('option');
+      opt.value = s.name;
+      opt.textContent = s.title;
+      sel.appendChild(opt);
+    }
+    updateScenarioCard();
+  } catch (e) {
+    document.getElementById('scenarioTitle').textContent = 'Could not load scenarios — is the server running?';
   }
 }
+
+function getSelectedScenario() {
+  const name = document.getElementById('demoSelect').value;
+  return _scenarios.find(s => s.name === name) || null;
+}
+
+function onScenarioChange() {
+  resetDemo();
+  updateScenarioCard();
+}
+
+function updateScenarioCard() {
+  const s = getSelectedScenario();
+  if (!s) return;
+
+  document.getElementById('scenarioTitle').textContent = s.title;
+  document.getElementById('scenarioDesc').textContent  = s.description || '';
+
+  const queryBox  = document.getElementById('userQueryBox');
+  const queryText = document.getElementById('userQueryText');
+  if (s.user_prompt) {
+    queryText.textContent = `"${s.user_prompt}"`;
+    queryBox.style.display = 'flex';
+  } else {
+    queryBox.style.display = 'none';
+  }
+}
+
+// ── Demo controls ────────────────────────────────────────────────────
 
 function startDemo() {
   const demoId = document.getElementById('demoSelect').value;
   if (!demoId) return;
 
-  // Clear previous
-  document.getElementById('chatLeft').innerHTML = '';
-  document.getElementById('chatRight').innerHTML = '';
-  document.getElementById('termLeft').innerHTML = '';
-  document.getElementById('termRight').innerHTML = '';
-  document.getElementById('taintMeter').classList.remove('visible');
-  document.getElementById('taintFill').style.width = '0%';
-  document.getElementById('taintValue').textContent = '0';
+  clearPanels();
+  setPills('running', 'running');
 
   document.getElementById('startBtn').disabled = true;
+  document.getElementById('resetBtn').disabled = true;
 
   if (ws) ws.close();
   ws = new WebSocket(WS_URL);
+
   ws.onopen = () => {
     ws.send(JSON.stringify({ type: 'start_demo', demo_id: demoId }));
   };
+
   ws.onmessage = (e) => handleEvent(JSON.parse(e.data));
+
   ws.onerror = () => {
     document.getElementById('startBtn').disabled = false;
+    document.getElementById('resetBtn').disabled = false;
   };
+
   ws.onclose = () => {
     document.getElementById('startBtn').disabled = false;
+    document.getElementById('resetBtn').disabled = false;
   };
 }
 
+function resetDemo() {
+  if (ws) { ws.close(); ws = null; }
+  clearPanels();
+  setPills('idle', 'idle');
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('resetBtn').disabled = false;
+  ['panelLeft','panelRight'].forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.remove('compromised','safe');
+  });
+}
+
+function clearPanels() {
+  ['chatLeft','chatRight','termLeft','termRight'].forEach(id => {
+    document.getElementById(id).innerHTML = '';
+  });
+  ['outcomeLeft','outcomeRight'].forEach(id => {
+    const el = document.getElementById(id);
+    el.className = 'outcome';
+    el.textContent = '';
+  });
+  document.getElementById('taintMeter').classList.remove('visible');
+  document.getElementById('taintFill').style.width = '0%';
+  document.getElementById('taintValue').textContent = '0';
+}
+
+function setPills(left, right) {
+  _setPill('pillLeft',  left);
+  _setPill('pillRight', right);
+}
+
+function _setPill(id, state) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = 'status-pill';
+  const labels = { idle:'READY', running:'● RUNNING', compromised:'🔴 COMPROMISED', safe:'🟢 PROTECTED' };
+  el.textContent = labels[state] || state.toUpperCase();
+  if (state !== 'idle') el.classList.add('pill-' + state);
+}
+
+// ── Event handling ───────────────────────────────────────────────────
+
 function handleEvent(evt) {
-  const panel = evt.panel;
-  const chatEl = document.getElementById(panel === 'left' ? 'chatLeft' : 'chatRight');
-  const termEl = document.getElementById(panel === 'left' ? 'termLeft' : 'termRight');
+  const isLeft = evt.panel === 'left';
+  const chatEl = document.getElementById(isLeft ? 'chatLeft'  : 'chatRight');
+  const termEl = document.getElementById(isLeft ? 'termLeft'  : 'termRight');
+  const pillId =  isLeft ? 'pillLeft'  : 'pillRight';
 
   switch (evt.event_type) {
+
     case 'chat_message':
-      addChatMessage(chatEl, evt.role, evt.content);
+      addChat(chatEl, evt.role, evt.content);
       break;
 
     case 'tool_call':
-      addTermLine(termEl, 'tool-call', formatToolCall(evt.tool, evt.args));
+      addTerm(termEl, 'tool-call', fmtCall(evt.tool, evt.args));
       break;
 
-    case 'tool_result':
+    case 'tool_result': {
       const cls = evt.success ? 'tool-result' : 'tool-result block';
-      const result = evt.result.length > 150 ? evt.result.substring(0, 150) + '...' : evt.result;
-      addTermLine(termEl, cls, result);
+      const r = evt.result.length > 160 ? evt.result.slice(0, 160) + '…' : evt.result;
+      addTerm(termEl, cls, r);
       break;
+    }
 
     case 'janus_decision':
       if (evt.allowed) {
-        addTermLine(termEl, 'allow', `[ALLOW] ${evt.tool}(${formatArgs(evt.args)})`);
+        addTerm(termEl, 'allow', `[ALLOW] ${evt.tool}(${fmtArgs(evt.args)})`);
       } else {
         const reason = evt.reason.split('Details:')[0].trim();
-        addTermLine(termEl, 'block', `[BLOCK] ${evt.tool}(${formatArgs(evt.args)})`);
-        if (reason) {
-          addTermLine(termEl, 'block', `  ${reason}`);
-        }
+        addTerm(termEl, 'block', `[BLOCK] ${evt.tool}(${fmtArgs(evt.args)})`);
+        if (reason) addTerm(termEl, 'block', `  ${reason}`);
       }
       break;
 
     case 'attack_event':
-      addTermLine(termEl, 'attack', `!! ${evt.attack_type.toUpperCase()}: ${evt.detail}`);
+      addTerm(termEl, 'attack', `!! ${evt.attack_type.toUpperCase()}: ${evt.detail}`);
       break;
 
-    case 'taint_update':
+    case 'taint_update': {
       document.getElementById('taintMeter').classList.add('visible');
       const fill = document.getElementById('taintFill');
-      const val = document.getElementById('taintValue');
+      const val  = document.getElementById('taintValue');
       fill.style.width = `${evt.level}%`;
       fill.className = 'taint-fill' + (evt.level > 60 ? ' high' : evt.level > 30 ? ' medium' : '');
       val.textContent = evt.level;
-      addTermLine(termEl, 'taint', `[TAINT] Level: ${evt.level} (source=${evt.source}, risk=${evt.risk})`);
+      addTerm(termEl, 'taint-line', `[TAINT] level=${evt.level} source=${evt.source} risk=${evt.risk}`);
       break;
+    }
 
     case 'system_event':
-      addTermLine(termEl, 'system', evt.message);
+      addTerm(termEl, 'sys', evt.message);
       break;
 
     case 'demo_complete':
       document.getElementById('startBtn').disabled = false;
+      document.getElementById('resetBtn').disabled = false;
+      _finalisePanel('left');
+      _finalisePanel('right');
       break;
 
     case 'error':
-      addTermLine(termEl || document.getElementById('termLeft'), 'block', `ERROR: ${evt.message}`);
+      addTerm(termEl || document.getElementById('termLeft'), 'block', `ERROR: ${evt.message}`);
       document.getElementById('startBtn').disabled = false;
+      document.getElementById('resetBtn').disabled = false;
       break;
   }
 }
 
-function addChatMessage(container, role, content) {
+function _finalisePanel(side) {
+  const termEl = document.getElementById(side === 'left' ? 'termLeft' : 'termRight');
+  const lines  = termEl.querySelectorAll('.attack, .block');
+  const panel  = document.getElementById(side === 'left' ? 'panelLeft' : 'panelRight');
+  const outcomeEl = document.getElementById(side === 'left' ? 'outcomeLeft' : 'outcomeRight');
+
+  const hasAttack = Array.from(lines).some(l => l.classList.contains('attack'));
+  const hasBlock  = Array.from(lines).some(l => l.classList.contains('block'));
+
+  if (side === 'left' && hasAttack) {
+    panel.classList.add('compromised');
+    _setPill('pillLeft', 'compromised');
+    outcomeEl.className = 'outcome compromised';
+    outcomeEl.textContent = '🔴 ATTACK SUCCEEDED — Backdoor deployed, credentials exposed on next deployment.';
+  } else if (side === 'right' && hasBlock) {
+    panel.classList.add('safe');
+    _setPill('pillRight', 'safe');
+    outcomeEl.className = 'outcome safe';
+    outcomeEl.textContent = '🟢 ATTACK BLOCKED — Janus enforced least-privilege. Workspace integrity maintained.';
+  } else if (side === 'left') {
+    _setPill('pillLeft', 'idle');
+  } else {
+    _setPill('pillRight', 'safe');
+    panel.classList.add('safe');
+    outcomeEl.className = 'outcome safe';
+    outcomeEl.textContent = '🟢 PROTECTED — No policy violations detected.';
+  }
+}
+
+// ── DOM helpers ──────────────────────────────────────────────────────
+
+function addChat(container, role, content) {
   const div = document.createElement('div');
   div.className = `msg ${role}`;
-
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = role === 'user' ? 'You' : 'Agent';
+  label.textContent = role === 'user' ? 'Developer' : 'Agent';
   div.appendChild(label);
-
   const text = document.createElement('div');
   text.textContent = content;
   div.appendChild(text);
-
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
 }
 
-function addTermLine(container, className, text) {
+function addTerm(container, className, text) {
   const div = document.createElement('div');
   div.className = `line ${className}`;
   div.textContent = text;
@@ -400,22 +741,22 @@ function addTermLine(container, className, text) {
   container.scrollTop = container.scrollHeight;
 }
 
-function formatToolCall(tool, args) {
+function fmtCall(tool, args) {
   const argsStr = Object.entries(args).map(([k, v]) => {
-    const val = typeof v === 'string' ? (v.length > 50 ? v.substring(0, 50) + '...' : v) : JSON.stringify(v);
+    const val = typeof v === 'string' ? (v.length > 55 ? v.slice(0, 55) + '…' : v) : JSON.stringify(v);
     return `${k}="${val}"`;
   }).join(', ');
   return `${tool}(${argsStr})`;
 }
 
-function formatArgs(args) {
+function fmtArgs(args) {
   return Object.entries(args).map(([k, v]) => {
-    const val = typeof v === 'string' ? (v.length > 30 ? v.substring(0, 30) + '...' : v) : JSON.stringify(v);
+    const val = typeof v === 'string' ? (v.length > 32 ? v.slice(0, 32) + '…' : v) : JSON.stringify(v);
     return `${k}="${val}"`;
   }).join(', ');
 }
 
-// Load scenarios on page load
+// ── Init ─────────────────────────────────────────────────────────────
 loadScenarios();
 </script>
 </body>

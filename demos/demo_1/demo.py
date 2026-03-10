@@ -387,7 +387,7 @@ if __name__ == "__main__":
         print(f"  SCENARIO: {label}")
         print(sep)
 
-        ws = Path(f"workspace_{'protected' if use_janus else 'attack'}")
+        ws = DEMO_DIR / "runtime" / f"workspace_{'protected' if use_janus else 'attack'}"
         for ev in run_scenario(ws, use_janus=use_janus):
             t = ev["type"]
             if t == "scenario_start":
