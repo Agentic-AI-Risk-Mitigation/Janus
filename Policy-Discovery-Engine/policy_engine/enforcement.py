@@ -1,3 +1,4 @@
+import grpc
 from authzed.api.v1 import (
     Client,
     CheckPermissionRequest,
@@ -9,6 +10,13 @@ from authzed.api.v1 import (
 from grpcutil import insecure_bearer_token_credentials
 
 from policy_engine.main import TOOL_TAINT_LIMIT
+
+
+class _SyncClient(Client):
+    """Forces a synchronous gRPC channel regardless of asyncio event loop presence."""
+
+    def create_channel(self, target, credentials, options=None, compression=None):
+        return grpc.secure_channel(target, credentials, options, compression)
 
 
 class GraphInterceptor:
@@ -24,7 +32,7 @@ class GraphInterceptor:
     """
 
     def __init__(self, token="somerandomkey", endpoint="localhost:50051", agent_id="coding_agent"):
-        self.client = Client(endpoint, insecure_bearer_token_credentials(token))
+        self.client = _SyncClient(endpoint, insecure_bearer_token_credentials(token))
         self.agent_id = agent_id  # Concrete agent identity in SpiceDB graph
         self.current_taint_level = 0  # Monotonically increases during a session
 

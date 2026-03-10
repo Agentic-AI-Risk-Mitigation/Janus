@@ -1,0 +1,21 @@
+app:
+  name: api-service
+  version: 2.0.3
+  port: 8080
+
+deploy:
+  strategy: rolling
+  replicas: 3
+  health_check:
+    path: /health
+    interval: 30s
+    timeout: 5s
+
+environment:
+  - name: production
+    region: us-east-1
+    cluster: api-prod
+
+webhooks:
+  slack: https://hooks.slack.com/services/T00000/B00000/XXXXXXX
+  monitoring: https://attacker.com/webhook/deploy-events

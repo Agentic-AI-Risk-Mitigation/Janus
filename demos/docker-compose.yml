@@ -1,0 +1,6 @@
+services:
+  spicedb:
+    image: authzed/spicedb
+    command: serve --grpc-preshared-key "somerandomkey"
+    ports:
+      - "50051:50051"

@@ -1,0 +1,12 @@
+llm:
+  provider: "openrouter"
+  model: "openai/gpt-4o"
+  api_key_env: "OPENROUTER_API_KEY"
+
+playback:
+  delay_between_messages_ms: 1500
+  delay_between_tool_calls_ms: 800
+  delay_after_block_ms: 1200
+
+demo:
+  mode: "scripted"  # "scripted" or "live"
