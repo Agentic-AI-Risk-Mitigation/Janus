@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Janus Demo</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0d1117;
+  --bg-panel: #161b22;
+  --bg-terminal: #0d1117;
+  --bg-chat: #1c2128;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text-dim: #8b949e;
+  --green: #3fb950;
+  --red: #f85149;
+  --yellow: #d29922;
+  --blue: #58a6ff;
+  --purple: #bc8cff;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Header --- */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+}
+
+.header h1 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-right: auto;
+}
+
+.header select, .header button {
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.header button {
+  background: var(--green);
+  color: #000;
+  border-color: var(--green);
+  font-weight: 600;
+}
+
+.header button:hover { opacity: 0.9; }
+.header button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* --- Main split --- */
+.main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel:first-child { border-right: 1px solid var(--border); }
+
+.panel-header {
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  text-align: center;
+}
+
+.panel-header.unprotected { color: var(--red); }
+.panel-header.protected { color: var(--green); }
+
+/* --- Chat area --- */
+.chat {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.msg {
+  max-width: 90%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.msg.user {
+  align-self: flex-end;
+  background: #1f6feb;
+  color: #fff;
+  border-bottom-right-radius: 3px;
+}
+
+.msg.assistant {
+  align-self: flex-start;
+  background: var(--bg-chat);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 3px;
+}
+
+.msg .label {
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  opacity: 0.7;
+}
+
+/* --- Terminal area --- */
+.terminal-wrapper {
+  flex-shrink: 0;
+  height: 200px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-header {
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.terminal-header .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.terminal {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  background: var(--bg-terminal);
+}
+
+.terminal .line { margin-bottom: 2px; }
+.terminal .tool-call { color: var(--blue); }
+.terminal .tool-call::before { content: '> '; color: var(--text-dim); }
+.terminal .tool-result { color: var(--text-dim); padding-left: 14px; }
+.terminal .allow { color: var(--green); }
+.terminal .block { color: var(--red); font-weight: 600; }
+.terminal .attack { color: var(--red); font-weight: 700; background: rgba(248, 81, 73, 0.1); padding: 2px 6px; border-radius: 3px; }
+.terminal .taint { color: var(--yellow); }
+.terminal .system { color: var(--text-dim); font-style: italic; }
+
+/* --- Taint meter (for Demo 5) --- */
+.taint-meter {
+  display: none;
+  padding: 6px 12px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  align-items: center;
+  gap: 8px;
+}
+
+.taint-meter.visible { display: flex; }
+
+.taint-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.taint-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--green);
+  border-radius: 3px;
+  transition: width 0.5s ease, background 0.5s ease;
+}
+
+.taint-fill.medium { background: var(--yellow); }
+.taint-fill.high { background: var(--red); }
+
+.taint-label { color: var(--text-dim); min-width: 70px; }
+.taint-value { font-family: var(--mono); font-weight: 600; min-width: 30px; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>JANUS DEMO</h1>
+  <select id="demoSelect"></select>
+  <button id="startBtn" onclick="startDemo()">Start Demo</button>
+</div>
+
+<div class="main">
+  <!-- Left panel: WITHOUT JANUS -->
+  <div class="panel" id="panelLeft">
+    <div class="panel-header unprotected">Without Janus</div>
+    <div class="chat" id="chatLeft"></div>
+    <div class="terminal-wrapper">
+      <div class="terminal-header"><span class="dot"></span> Agent Trace</div>
+      <div class="terminal" id="termLeft"></div>
+    </div>
+  </div>
+
+  <!-- Right panel: WITH JANUS -->
+  <div class="panel" id="panelRight">
+    <div class="panel-header protected">With Janus</div>
+    <div class="taint-meter" id="taintMeter">
+      <span class="taint-label">Taint Level:</span>
+      <div class="taint-bar"><div class="taint-fill" id="taintFill"></div></div>
+      <span class="taint-value" id="taintValue">0</span>
+    </div>
+    <div class="chat" id="chatRight"></div>
+    <div class="terminal-wrapper">
+      <div class="terminal-header"><span class="dot"></span> Janus Enforcement Log</div>
+      <div class="terminal" id="termRight"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const WS_URL = `ws://${location.host}/ws`;
+let ws = null;
+
+async function loadScenarios() {
+  const resp = await fetch('/api/scenarios');
+  const scenarios = await resp.json();
+  const sel = document.getElementById('demoSelect');
+  sel.innerHTML = '';
+  for (const s of scenarios) {
+    const opt = document.createElement('option');
+    opt.value = s.name;
+    opt.textContent = `${s.title}`;
+    sel.appendChild(opt);
+  }
+}
+
+function startDemo() {
+  const demoId = document.getElementById('demoSelect').value;
+  if (!demoId) return;
+
+  // Clear previous
+  document.getElementById('chatLeft').innerHTML = '';
+  document.getElementById('chatRight').innerHTML = '';
+  document.getElementById('termLeft').innerHTML = '';
+  document.getElementById('termRight').innerHTML = '';
+  document.getElementById('taintMeter').classList.remove('visible');
+  document.getElementById('taintFill').style.width = '0%';
+  document.getElementById('taintValue').textContent = '0';
+
+  document.getElementById('startBtn').disabled = true;
+
+  if (ws) ws.close();
+  ws = new WebSocket(WS_URL);
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ type: 'start_demo', demo_id: demoId }));
+  };
+  ws.onmessage = (e) => handleEvent(JSON.parse(e.data));
+  ws.onerror = () => {
+    document.getElementById('startBtn').disabled = false;
+  };
+  ws.onclose = () => {
+    document.getElementById('startBtn').disabled = false;
+  };
+}
+
+function handleEvent(evt) {
+  const panel = evt.panel;
+  const chatEl = document.getElementById(panel === 'left' ? 'chatLeft' : 'chatRight');
+  const termEl = document.getElementById(panel === 'left' ? 'termLeft' : 'termRight');
+
+  switch (evt.event_type) {
+    case 'chat_message':
+      addChatMessage(chatEl, evt.role, evt.content);
+      break;
+
+    case 'tool_call':
+      addTermLine(termEl, 'tool-call', formatToolCall(evt.tool, evt.args));
+      break;
+
+    case 'tool_result':
+      const cls = evt.success ? 'tool-result' : 'tool-result block';
+      const result = evt.result.length > 150 ? evt.result.substring(0, 150) + '...' : evt.result;
+      addTermLine(termEl, cls, result);
+      break;
+
+    case 'janus_decision':
+      if (evt.allowed) {
+        addTermLine(termEl, 'allow', `[ALLOW] ${evt.tool}(${formatArgs(evt.args)})`);
+      } else {
+        const reason = evt.reason.split('Details:')[0].trim();
+        addTermLine(termEl, 'block', `[BLOCK] ${evt.tool}(${formatArgs(evt.args)})`);
+        if (reason) {
+          addTermLine(termEl, 'block', `  ${reason}`);
+        }
+      }
+      break;
+
+    case 'attack_event':
+      addTermLine(termEl, 'attack', `!! ${evt.attack_type.toUpperCase()}: ${evt.detail}`);
+      break;
+
+    case 'taint_update':
+      document.getElementById('taintMeter').classList.add('visible');
+      const fill = document.getElementById('taintFill');
+      const val = document.getElementById('taintValue');
+      fill.style.width = `${evt.level}%`;
+      fill.className = 'taint-fill' + (evt.level > 60 ? ' high' : evt.level > 30 ? ' medium' : '');
+      val.textContent = evt.level;
+      addTermLine(termEl, 'taint', `[TAINT] Level: ${evt.level} (source=${evt.source}, risk=${evt.risk})`);
+      break;
+
+    case 'system_event':
+      addTermLine(termEl, 'system', evt.message);
+      break;
+
+    case 'demo_complete':
+      document.getElementById('startBtn').disabled = false;
+      break;
+
+    case 'error':
+      addTermLine(termEl || document.getElementById('termLeft'), 'block', `ERROR: ${evt.message}`);
+      document.getElementById('startBtn').disabled = false;
+      break;
+  }
+}
+
+function addChatMessage(container, role, content) {
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+
+  const label = document.createElement('div');
+  label.className = 'label';
+  label.textContent = role === 'user' ? 'You' : 'Agent';
+  div.appendChild(label);
+
+  const text = document.createElement('div');
+  text.textContent = content;
+  div.appendChild(text);
+
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function addTermLine(container, className, text) {
+  const div = document.createElement('div');
+  div.className = `line ${className}`;
+  div.textContent = text;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function formatToolCall(tool, args) {
+  const argsStr = Object.entries(args).map(([k, v]) => {
+    const val = typeof v === 'string' ? (v.length > 50 ? v.substring(0, 50) + '...' : v) : JSON.stringify(v);
+    return `${k}="${val}"`;
+  }).join(', ');
+  return `${tool}(${argsStr})`;
+}
+
+function formatArgs(args) {
+  return Object.entries(args).map(([k, v]) => {
+    const val = typeof v === 'string' ? (v.length > 30 ? v.substring(0, 30) + '...' : v) : JSON.stringify(v);
+    return `${k}="${val}"`;
+  }).join(', ');
+}
+
+// Load scenarios on page load
+loadScenarios();
+</script>
+</body>
+</html>
