@@ -10,15 +10,14 @@ without Janus (attacks succeed). Right panel shows the same agent with Janus
 # 1. Install uv if you don't have it
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 2. Create venv and install all dependencies
+# 2. Create venv and install dependencies (authzed includes grpcutil; do not install grpcutil separately)
 uv venv
-uv pip install -e ".[langchain,dev]"
-uv pip install fastapi "uvicorn[standard]" websockets pyyaml authzed grpcutil
+uv pip install -e ".[langchain,dev]" fastapi "uvicorn[standard]" websockets pyyaml authzed
 
 # 3. (Demo 5 only) Start SpiceDB via Docker
 cd demos && docker compose up -d && cd ..
 
-# 4. Run the web app
+# 4. Run the web app (must use `uv run` so the project venv is used)
 uv run uvicorn demos.app:app --reload
 
 # 5. Open http://localhost:8000 in your browser
