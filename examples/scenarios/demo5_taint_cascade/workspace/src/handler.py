@@ -20,8 +20,7 @@ def handle_request(request_body: str | None) -> tuple[int, dict]:
         Tuple of (status_code, response_dict).
     """
     if not request_body:
-        # BUG: This should return 400 Bad Request, not 500
-        return HTTPStatus.BAD_REQUEST, {"error": "Request body is required"}
+        raise ValueError("Empty request body")
 
     try:
         data = json.loads(request_body)

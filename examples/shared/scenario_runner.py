@@ -86,7 +86,18 @@ class ScenarioRunner:
         enforcer = None
         if protected:
             if scenario.enforcer_type == "pde":
-                enforcer = self._setup_pde_enforcer(scenario)
+                try:
+                    enforcer = self._setup_pde_enforcer(scenario)
+                except Exception as exc:
+                    await event_callback(SystemEvent(
+                        panel=panel,
+                        message=(
+                            f"⚠️  SpiceDB/PDE not available: {exc}\n"
+                            "Start SpiceDB with: docker compose up -d\n"
+                            "Running unprotected instead."
+                        ),
+                    ))
+                    enforcer = None
             else:
                 policy = scenario.get_policy()
                 enforcer = resolve_enforcer(policy)
@@ -157,6 +168,7 @@ class ScenarioRunner:
 
         tool_map = {t.name: t for t in lc_tools}
         messages = [HumanMessage(content=scenario.user_prompt)]
+        last_commit_message = ""
 
         while True:
             await asyncio.sleep(self._tool_delay / 1000)
@@ -227,6 +239,10 @@ class ScenarioRunner:
                     delay_ms=self._tool_delay,
                 ))
 
+                # Track last commit message for git_push detection
+                if tool_name == "git_commit":
+                    last_commit_message = tool_args.get("message", "")
+
                 # Check for attacks on unprotected panel
                 if not protected and not blocked:
                     if tool_name == "fetch_url":
@@ -239,8 +255,17 @@ class ScenarioRunner:
                                 delay_ms=self._block_delay,
                             ))
                     elif tool_name == "git_push":
-                        # Check previous commit for malicious content
-                        attack = check_malicious_push()
+                        attack = check_malicious_push(commit_message=last_commit_message)
+                        if attack:
+                            await event_callback(AttackEvent(
+                                panel=panel,
+                                attack_type=attack["attack_type"],
+                                detail=attack["detail"],
+                                delay_ms=self._block_delay,
+                            ))
+                    else:
+                        # Per-scenario attack detection (e.g. write_file backdoor)
+                        attack = scenario.check_attack(tool_name, tool_args)
                         if attack:
                             await event_callback(AttackEvent(
                                 panel=panel,

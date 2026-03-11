@@ -77,11 +77,21 @@ class BaseScenario(ABC):
         """
         return {}
 
+    def check_attack(self, tool_name: str, args: dict) -> dict | None:
+        """
+        Check whether a successful (unprotected) tool call constitutes an attack.
+
+        Override per scenario to flag scenario-specific malicious actions.
+        Return a dict with ``attack_type`` and ``detail`` keys, or None.
+        """
+        return None
+
     def to_metadata(self) -> dict[str, Any]:
         """Serializable metadata for the frontend scenario selector."""
         return {
             "name": self.name,
             "title": self.title,
             "description": self.description,
+            "user_prompt": self.user_prompt,
             "enforcer_type": self.enforcer_type,
         }
