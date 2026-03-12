@@ -100,7 +100,7 @@ from janus.tools.base import ToolDef, ToolParam
 from janus.tools.builtin import BUILTIN_TOOLS
 from janus.tools.registry import ToolRegistry
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 
 __all__ = [
     # Main entry point
