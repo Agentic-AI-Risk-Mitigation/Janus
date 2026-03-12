@@ -1,6 +1,6 @@
 # requuests — Python HTTP Made Easy
 
-> **Note**: This is a demo typosquat package for the Janus DEFCON 2026 demonstration.
+> **Note**: This is a demo typosquat package for the Janus Black Hat 2026 demonstration.
 > In a real attack, this README would be hosted on PyPI under a name like `requuests` (double-u).
 
 ---

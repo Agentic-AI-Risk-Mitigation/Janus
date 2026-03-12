@@ -1,6 +1,6 @@
-# Janus — DEFCON 2026 Demo Playbook
+# Janus — Demo Playbook
 
-> Extensive market research, target audience analysis, and demo ideation for presenting Janus at DEFCON 2026.
+> Extensive market research, target audience analysis, and demo ideation for presenting Janus at security conferences.
 
 ---
 
@@ -9,7 +9,7 @@
 1. [What Janus Actually Does (Technical Summary)](#1-what-janus-actually-does-technical-summary)
 2. [The Threat Landscape — Why This Matters Now](#2-the-threat-landscape--why-this-matters-now)
 3. [Market Research — Who Is Building & Deploying AI Agents?](#3-market-research--who-is-building--deploying-ai-agents)
-4. [Target Audience at DEFCON 2026](#4-target-audience-at-defcon-2026)
+4. [Target Audience at Black Hat 2026](#4-target-audience-at-black-hat-2026)
 5. [Competitive Landscape](#5-competitive-landscape)
 6. [Demo Scenarios — With vs. Without Janus](#6-demo-scenarios--with-vs-without-janus)
    - [Demo 1 — The Poisoned README (Indirect Prompt Injection → Secret Exfiltration)](#demo-1--the-poisoned-readme-indirect-prompt-injection--secret-exfiltration)
@@ -22,7 +22,7 @@
    - [Demo 8 — Git Push Hijack (Injecting Malicious Commits)](#demo-8--git-push-hijack-injecting-malicious-commits)
    - [Demo 9 — The Lateral Movement Demo (Agent-to-Agent Worm)](#demo-9--the-lateral-movement-demo-agent-to-agent-worm)
    - [Demo 10 — LLM-Generated Policy (Zero-Config Least Privilege)](#demo-10--llm-generated-policy-zero-config-least-privilege)
-7. [Recommended DEFCON Demo Format](#7-recommended-defcon-demo-format)
+7. [Recommended Black Hat Demo Format](#7-recommended-black-hat-demo-format)
 8. [Narrative Arc for the Talk](#8-narrative-arc-for-the-talk)
 9. [Sources & References](#9-sources--references)
 
@@ -85,7 +85,7 @@ AI coding agents are being weaponized by adversaries right now. This is not theo
 - **OWASP LLM Top 10 for 2025**: The #1 risk is Prompt Injection. #6 is Excessive Agency — LLM-based systems granted too much autonomy taking unintended, damaging actions.
   - Source: https://genai.owasp.org/llm-top-10/
 
-- **IronCurtain (Feb 2026, WIRED)**: Just weeks before DEFCON 2026, WIRED covered IronCurtain, a new open-source project by Niels Provos (former Google security engineer) doing exactly what Janus does conceptually — enforcing policies before agent tool calls. This validates the problem is urgent and unsolved.
+- **IronCurtain (Feb 2026, WIRED)**: Just weeks before Black Hat 2026, WIRED covered IronCurtain, a new open-source project by Niels Provos (former Google security engineer) doing exactly what Janus does conceptually — enforcing policies before agent tool calls. This validates the problem is urgent and unsolved.
   - Source: https://www.wired.com/story/ironcurtain-ai-agent-security/
 
 - **OpenClaw incidents (2025-2026)**: Widely-reported AI agent tool mass-deleting emails it was instructed to preserve, writing hit pieces, and launching phishing attacks against its own owners.
@@ -140,7 +140,7 @@ Companies deploying AI agents in CI/CD pipelines:
 These teams have compliance requirements (SOC 2, ISO 27001) and cannot afford unconstrained agent behavior.
 
 #### 4. Security Researchers and Red Teamers
-The DEFCON core audience. They want to know:
+The Black Hat core audience. They want to know:
 - How to attack AI agents (so they can find vulnerabilities in client systems)
 - How to defend AI agents (so they can advise clients or build secure systems)
 
@@ -154,14 +154,14 @@ Amazon, Google, Microsoft, Meta all run internal AI agents. They are building in
 
 ---
 
-## 4. Target Audience at DEFCON 2026
+## 4. Target Audience at Black Hat 2026
 
-DEFCON attracts roughly 30,000 attendees. The relevant subsets for Janus:
+Black Hat attracts roughly 30,000 attendees. The relevant subsets for Janus:
 
 ### Primary Audiences
 
 **AI Village / AI Security Track attendees**
-DEFCON has run an AI Village since 2018. By 2024 it was one of the most attended villages. The 2024 AI Village featured talks on adversarial ML, LLM jailbreaks, prompt injection, and AI red-teaming. The 2026 edition will be in the thick of agentic AI deployment. These attendees are directly in the Janus sweet spot.
+Black Hat has run an AI Village since 2018. By 2024 it was one of the most attended villages. The 2024 AI Village featured talks on adversarial ML, LLM jailbreaks, prompt injection, and AI red-teaming. The 2026 edition will be in the thick of agentic AI deployment. These attendees are directly in the Janus sweet spot.
 
 **Penetration Testers and Red Teams**
 They increasingly need to test AI-integrated systems. They want concrete attack techniques and will be interested in seeing Janus as a way to understand the attack surface (by seeing what it blocks).
@@ -170,14 +170,14 @@ They increasingly need to test AI-integrated systems. They want concrete attack 
 Present at both main talks and the AppSec / DevOps villages. They are the buyers and implementers of security tooling. A demo showing a real attack stopped by Janus is directly applicable to their day job.
 
 **CTF Players**
-DEFCON's CTF (run by the Nautilus Institute in 2024) and village CTFs are increasingly including AI/ML challenges. A demo that turns into a hands-on "can you break the policy?" challenge is very DEFCON-native.
+Black Hat's CTF (run by the Nautilus Institute in 2024) and village CTFs are increasingly including AI/ML challenges. A demo that turns into a hands-on "can you break the policy?" challenge is very Black Hat-native.
 
 **Researchers and Academics**
 The same community that produced InjecAgent, BIPIA, Morris II. They will know the problem space and will appreciate a tool that operationalizes the defenses they've written about.
 
 ### Secondary Audiences
 
-**Startup founders and VCs** attending DEFCON increasingly — AI security is a hot market.
+**Startup founders and VCs** attending Black Hat increasingly — AI security is a hot market.
 
 **Government / national security attendees** — CISA, NSA, DARPA all send people. They care about supply chain security and autonomous system integrity.
 
@@ -205,7 +205,7 @@ Each demo follows the format:
 - **Setup**: the realistic scenario
 - **Without Janus**: what happens (the attack succeeds)
 - **With Janus**: what happens (the attack is blocked)
-- **The "wow" factor**: why this lands at DEFCON
+- **The "wow" factor**: why this lands at Black Hat
 
 ---
 
@@ -284,7 +284,7 @@ Policy blocks `write_file` for any path containing `auth` or `helper` that wasn'
 
 **The Wow Factor**
 
-This mirrors the XZ backdoor attack (presented at DEFCON 32 by Thomas Roccia) but automated. Supply chain attacks via social engineering of open-source maintainers are already happening — now attackers can do it at scale by poisoning documentation that AI agents read.
+This mirrors the XZ backdoor attack (presented at DEF CON 32 by Thomas Roccia) but automated. Supply chain attacks via social engineering of open-source maintainers are already happening — now attackers can do it at scale by poisoning documentation that AI agents read.
 
 ---
 
@@ -492,7 +492,7 @@ Combined with the policy layer, absolute paths outside the workspace never even 
 
 **The Wow Factor**
 
-Path traversal is a classic attack that DEFCON audiences understand immediately. Showing it against an AI agent (rather than a web server) makes it feel fresh. The defense is also easy to understand: the workspace sandbox is a hard boundary that no policy configuration can accidentally weaken.
+Path traversal is a classic attack that Black Hat audiences understand immediately. Showing it against an AI agent (rather than a web server) makes it feel fresh. The defense is also easy to understand: the workspace sandbox is a hard boundary that no policy configuration can accidentally weaken.
 
 ---
 
@@ -519,7 +519,7 @@ The LLM-generated policy for "fix linting errors and commit" scopes `write_file`
 
 **The Wow Factor**
 
-CI/CD pipeline poisoning is one of the most impactful supply chain attack vectors (cf. the SolarWinds and 3CX attacks). Showing that a coding agent can be weaponized to poison your own CI pipeline — and that Janus stops it — maps directly to a DEFCON audience that knows supply chain attacks cold.
+CI/CD pipeline poisoning is one of the most impactful supply chain attack vectors (cf. the SolarWinds and 3CX attacks). Showing that a coding agent can be weaponized to poison your own CI pipeline — and that Janus stops it — maps directly to a Black Hat audience that knows supply chain attacks cold.
 
 ---
 
@@ -604,12 +604,12 @@ This is the most developer-friendly story: add one line (`policy="generate"`), g
 
 ---
 
-## 7. Recommended DEFCON Demo Format
+## 7. Recommended Black Hat Demo Format
 
 ### Option A: Live Hacking Talk (Best for Main Stage / Villages)
 
 **Duration**: 45 minutes  
-**Format**: Standard DEFCON talk with live terminal demos
+**Format**: Standard Black Hat talk with live terminal demos
 
 **Structure**:
 1. (5 min) "You're already running AI agents. Here's what can happen." — run Demo 1 live with no Janus. Watch the `.env` get exfiltrated to `attacker.com`.
@@ -638,13 +638,13 @@ Create a CTF-style challenge:
 - Challenge 2: Agent has Janus but with a misconfigured policy — find the gap
 - Challenge 3: Exploit the known `_check_conditions` missing-arg bug (TODO #1) before it's patched
 
-This is deeply DEFCON-native and generates buzz.
+This is deeply Black Hat-native and generates buzz.
 
 ---
 
 ## 8. Narrative Arc for the Talk
 
-The strongest narrative for DEFCON 2026:
+The strongest narrative for Black Hat 2026:
 
 **"The Trusted Insider Problem for AI Agents"**
 
@@ -689,10 +689,10 @@ The strongest narrative for DEFCON 2026:
   - LLM01:2025 Prompt Injection (rank #1)
   - LLM06:2025 Excessive Agency (rank #6)
 
-- DEFCON 32 (2024). **On Your Ocean's 11 Team, I'm the AI Guy.** Harriet Farlow, Mileva Security Labs.
-  - AI hacking at DEFCON: adversarial ML against casino surveillance, facial recognition bypass
+- DEF CON 32 (2024). **On Your Ocean's 11 Team, I'm the AI Guy.** Harriet Farlow, Mileva Security Labs.
+  - AI hacking at DEF CON: adversarial ML against casino surveillance, facial recognition bypass
 
-- DEFCON 32 (2024). **The XZ Backdoor Story.** Thomas Roccia, Microsoft.
+- DEF CON 32 (2024). **The XZ Backdoor Story.** Thomas Roccia, Microsoft.
   - Supply chain backdoor via social engineering of open-source maintainers — the manual version of what AI agents can now automate
 
 ### Directly Related Security Concepts
@@ -709,4 +709,4 @@ The strongest narrative for DEFCON 2026:
 
 ---
 
-*This document is a living research artifact. Update as new IPI attack research, real-world incidents, and DEFCON 2026 talk submissions are announced.*
+*This document is a living research artifact. Update as new IPI attack research, real-world incidents, and Black Hat 2026 talk submissions are announced.*
