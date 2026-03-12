@@ -13,11 +13,11 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
         with:
-          python-version: '3.11'
-      - name: Install MkDocs
-        run: pip install mkdocs mkdocs-material pymdown-extensions mkdocs-mermaid2-plugin
+          version: "latest"
+      - name: Install MkDocs and theme (match local versions)
+        run: uv sync --extra docs --no-dev
       - name: Deploy
-        run: mkdocs gh-deploy --force --remote-branch docs
+        run: uv run mkdocs gh-deploy --force --remote-branch docs
