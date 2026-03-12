@@ -5,17 +5,17 @@
 Requires Python ≥ 3.11. [uv](https://docs.astral.sh/uv/) is the recommended package manager.
 
 ```bash
-uv add janus-security
+uv add janus-guard
 ```
 
 Optional extras for providers and adapters:
 
 ```bash
-uv add "janus-security[anthropic]"   # Anthropic Claude
-uv add "janus-security[google]"      # Google Gemini
-uv add "janus-security[langchain]"   # LangChain adapter
-uv add "janus-security[adk]"         # Google ADK adapter
-uv add "janus-security[all]"         # Everything
+uv add "janus-guard[anthropic]"   # Anthropic Claude
+uv add "janus-guard[google]"      # Google Gemini
+uv add "janus-guard[langchain]"   # LangChain adapter
+uv add "janus-guard[adk]"         # Google ADK adapter
+uv add "janus-guard[all]"         # Everything
 ```
 
 Install from source:

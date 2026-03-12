@@ -77,30 +77,30 @@ Requires Python ≥ 3.11. [uv](https://docs.astral.sh/uv/) is the recommended pa
 **Core (OpenAI / OpenAI-compatible providers):**
 
 ```bash
-uv add janus-security
+uv add janus-guard
 ```
 
 **With optional provider extras:**
 
 ```bash
-uv add "janus-security[anthropic]"   # Anthropic Claude
-uv add "janus-security[google]"      # Google Gemini
-uv add "janus-security[bedrock]"     # AWS Bedrock
-uv add "janus-security[langchain]"   # LangChain adapter
-uv add "janus-security[adk]"         # Google ADK adapter
-uv add "janus-security[all]"         # Everything
+uv add "janus-guard[anthropic]"   # Anthropic Claude
+uv add "janus-guard[google]"      # Google Gemini
+uv add "janus-guard[bedrock]"     # AWS Bedrock
+uv add "janus-guard[langchain]"   # LangChain adapter
+uv add "janus-guard[adk]"         # Google ADK adapter
+uv add "janus-guard[all]"         # Everything
 ```
 
 **For development:**
 
 ```bash
-uv add "janus-security[dev]"         # pytest, ruff, mypy
+uv add "janus-guard[dev]"         # pytest, ruff, mypy
 ```
 
 **Install from source:**
 
 ```bash
-git clone https://github.com/your-org/janus
+git clone https://github.com/Agentic-AI-Risk-Mitigation/Janus.git
 cd janus
 uv pip install -e .
 ```
@@ -441,7 +441,7 @@ Three integration depths are available.
 **Install:**
 
 ```bash
-uv add "janus-security[langchain]"
+uv add "janus-guard[langchain]"
 ```
 
 #### Depth 1 — Convert `ToolDef` list to secured `StructuredTool` list
@@ -498,7 +498,7 @@ Two integration depths are available.
 **Install:**
 
 ```bash
-uv add "janus-security[adk]"
+uv add "janus-guard[adk]"
 ```
 
 #### Depth 1 — Convert `ToolDef` list to ADK-native types

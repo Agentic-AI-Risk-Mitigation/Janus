@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "janus-security"
-version = "0.1.0"
+name = "janus-guard"
+version = "0.0.1"
 description = "System-level security for LLM agents via fine-grained policy enforcement on tool calls."
 readme = "README.md"
 requires-python = ">=3.11"
