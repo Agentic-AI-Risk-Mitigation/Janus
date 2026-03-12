@@ -6,6 +6,8 @@ Janus intercepts every tool call an LLM agent makes and validates it against a s
 
 > **Status:** Alpha (v0.1.0) — APIs are stable but subject to change.
 
+**[Documentation](https://agentic-ai-risk-mitigation.github.io/Janus/)** | **[GitHub](https://github.com/Agentic-AI-Risk-Mitigation/Janus)**
+
 ---
 
 ## Table of Contents
