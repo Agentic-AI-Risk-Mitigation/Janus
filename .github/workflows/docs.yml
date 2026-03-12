@@ -1,3 +1,5 @@
+# Builds MkDocs and deploys via GitHub Actions so the live site matches local.
+# In repo Settings -> Pages, set Source to "GitHub Actions" (not "Deploy from a branch").
 name: Deploy docs
 on:
   push:
@@ -7,17 +9,33 @@ on:
       - 'mkdocs.yml'
   workflow_dispatch:
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Setup uv
         uses: astral-sh/setup-uv@v4
         with:
           version: "latest"
-      - name: Install MkDocs and theme (match local versions)
+      - name: Install MkDocs and theme
         run: uv sync --extra docs --no-dev
-      - name: Deploy
-        run: uv run mkdocs gh-deploy --force --remote-branch docs
+      - name: Build site
+        run: uv run mkdocs build
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
