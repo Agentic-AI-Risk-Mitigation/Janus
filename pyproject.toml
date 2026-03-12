@@ -64,8 +64,8 @@ docs = [
 ]
 
 [project.urls]
-Repository = "https://github.com/your-org/janus"
-Issues     = "https://github.com/your-org/janus/issues"
+Repository = "https://github.com/Agentic-AI-Risk-Mitigation/Janus"
+Issues     = "https://github.com/Agentic-AI-Risk-Mitigation/Janus/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["janus"]

@@ -21,9 +21,15 @@ uv add "janus-security[all]"         # Everything
 Install from source:
 
 ```bash
-git clone https://github.com/your-org/janus
+git clone https://github.com/Agentic-AI-Risk-Mitigation/Janus.git
 cd janus
 uv pip install -e .
+```
+
+Copy `.env.example` to `.env` and fill in the API keys for the providers you plan to use:
+
+```bash
+cp .env.example .env
 ```
 
 To build docs locally (from the project root): `uv sync --extra docs` then `uv run mkdocs serve`.
