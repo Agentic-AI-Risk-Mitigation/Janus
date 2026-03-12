@@ -53,16 +53,7 @@ The rule evaluation logic (`_evaluate_rules`, `_check_conditions`, priority orde
 
 ---
 
-### 5. `schema.zed` and `main.py` SCHEMA have diverged
-**Files:** `Policy-Discovery-Engine/policy_engine/schema.zed` (34 lines, uses caveats + generic `tool` type) vs `main.py` SCHEMA (135 lines, per-tool object types, no caveats).
-
-They describe fundamentally different architectures. `schema.zed` is not used at runtime by anything.
-
-**Fix:** Either delete `schema.zed` (since `main.py` is the canonical schema), or load `schema.zed` from disk and keep `main.py` clean.
-
----
-
-### 6. No graceful degradation when SpiceDB is unreachable
+### 5. No graceful degradation when SpiceDB is unreachable
 **File:** `Policy-Discovery-Engine/policy_engine/enforcement.py`
 
 If SpiceDB is down, `check_tool_access` raises a raw gRPC exception. No timeout, no retry, no fail-open/fail-closed toggle.
@@ -71,7 +62,7 @@ If SpiceDB is down, `check_tool_access` raises a raw gRPC exception. No timeout,
 
 ---
 
-### 7. Taint level has no session reset
+### 6. Taint level has no session reset
 **File:** `Policy-Discovery-Engine/policy_engine/enforcement.py:31-33`
 
 `update_taint` uses `max()` so taint only ever increases. There is no way to start a fresh session without creating a new agent object. In long-running services this means taint leaks across tasks.
@@ -80,7 +71,7 @@ If SpiceDB is down, `check_tool_access` raises a raw gRPC exception. No timeout,
 
 ---
 
-### 8. `main.py` mixes schema, bootstrapping, constants, and demo code
+### 7. `main.py` mixes schema, bootstrapping, constants, and demo code
 **File:** `Policy-Discovery-Engine/policy_engine/main.py` (305 lines)
 
 `SCHEMA`, `TOOL_TAINT_LIMIT`, `RISK_TO_TAINT`, `bootstrap()`, `Session`, `allow_tool()`, and the `__main__` demo script are all in one file. Other modules import constants from it, creating tight coupling.
@@ -89,7 +80,7 @@ If SpiceDB is down, `check_tool_access` raises a raw gRPC exception. No timeout,
 
 ---
 
-### 9. `discovery.py` is partially broken, `caveats.py` is empty
+### 8. `discovery.py` is partially broken, `caveats.py` is empty
 - `caveats.py` — 0 bytes.
 - `discovery.py` — uses `ObjectRef` (should be `ObjectReference` in current authzed-py), and `define_risk()` is a stub. `learn_edge` uses the old generic `tool` object type, not the per-tool types from `main.py`.
 
@@ -101,7 +92,7 @@ Both are listed in the README project structure as functional components.
 
 ## 🟢 Minor — Polish
 
-### 10. `_drive_loop` off-by-one on max iterations
+### 9. `_drive_loop` off-by-one on max iterations
 **File:** `janus/llm/runner.py:109-147`
 
 The first `generate()` call happens outside the while loop. The iteration counter starts at 0 and increments inside the loop. This means the first tool-call round doesn't count toward `max_tool_iterations` — the actual max is `max_tool_iterations + 1`.
@@ -110,7 +101,7 @@ The first `generate()` call happens outside the while loop. The iteration counte
 
 ---
 
-### 11. PDE enforce message is always "blocked by Graph" even for taint blocks
+### 10. PDE enforce message is always "blocked by Graph" even for taint blocks
 **File:** `janus/policy/pde_enforcer.py:60`
 
 When taint blocks a call, SpiceDB was never queried, but the message says "blocked by Policy-Discovery-Engine Graph". Confusing for debugging.
@@ -119,14 +110,7 @@ When taint blocks a call, SpiceDB was never queried, but the message says "block
 
 ---
 
-### 12. Leftover "Progent" reference in docstring
-**File:** `janus/policy/enforcer.py:68` — says `"Progent/Janus format"`.
-
-**Fix:** Replace with `"Janus format"`.
-
----
-
-### 13. Docker healthcheck missing
+### 11. Docker healthcheck missing
 **File:** `Policy-Discovery-Engine/docker-compose.yml`
 
 SpiceDB takes 3-5 seconds to become ready. No Docker healthcheck means `docker compose up --wait` won't work.
@@ -143,14 +127,14 @@ healthcheck:
 
 ---
 
-### 14. CI pipeline not configured
+### 12. CI pipeline not configured
 **Status:** `pyproject.toml` already has `ruff`, `mypy`, and `pytest` in dev dependencies with config sections. But there is no GitHub Actions workflow or CI config to run them automatically.
 
 **Fix:** Add `.github/workflows/ci.yml` that runs `ruff check`, `mypy janus/`, and `pytest`.
 
 ---
 
-### 15. Connection pooling for SpiceDB client
+### 13. Connection pooling for SpiceDB client
 Every `PDEEnforcer.__init__` creates a new `GraphInterceptor` → new gRPC `Client`. Not an issue in the current single-agent-per-process usage, but would be a problem at scale.
 
 **Fix:** (When needed) Share a single `Client` instance via module-level singleton or dependency injection.

@@ -66,7 +66,7 @@ class PolicyEnforcer:
 
         The source can be:
         - A ``str`` or ``Path`` pointing to a JSON policy file.
-        - A ``dict`` in either the full Progent/Janus format or the simple
+        - A ``dict`` in either the full Janus format or the simple
           conditions-only shorthand.
 
         Replaces any previously loaded policy.
