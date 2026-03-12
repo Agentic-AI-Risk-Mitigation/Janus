@@ -70,8 +70,6 @@ Janus intercepts every tool call an LLM agent makes and validates it against a s
 
 ## Installation
 
-[Note: uv package is not implemented yet]
-
 Requires Python ≥ 3.11. [uv](https://docs.astral.sh/uv/) is the recommended package manager.
 
 **Core (OpenAI / OpenAI-compatible providers):**
