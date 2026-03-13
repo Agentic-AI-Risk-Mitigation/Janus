@@ -14,14 +14,14 @@ uv pip install -e ".[langchain,dev]"
 uv pip install fastapi "uvicorn[standard]" websockets pyyaml authzed grpcutil
 
 # Demo 5 only: start SpiceDB
-cd demos && docker compose up -d && cd ..
+cd examples && docker compose up -d && cd ..
 
-uv run uvicorn demos.app:app --reload
+uv run uvicorn examples.app:app --reload
 ```
 
 Open http://localhost:8000, pick a scenario from the dropdown, and click Start Demo.
 
-See `demos/README.md` for full setup (including uv install and tests).
+See `examples/README.md` for full setup (including uv install and tests).
 
 ## CLI (no browser)
 
@@ -45,8 +45,7 @@ uv run python -m examples.run demo5_taint_cascade --protected
 
 ## Layout
 
-- **`examples/`** — Scenario framework: shared events, mock tools, scripted LLM, scenario runner. Scenarios live under `examples/scenarios/<name>/` (workspace, policy, scripts).
-- **`demos/`** — FastAPI app, static UI, `docker-compose.yml` for SpiceDB.
+- **`examples/`** — Scenario framework and FastAPI web app: shared events, mock tools, scripted LLM, scenario runner, static UI, and `docker-compose.yml` for SpiceDB. Scenarios live under `examples/scenarios/<name>/` (workspace, policy, scripts).
 - **`janus/policy/pde/`** — SpiceDB schema, bootstrap, taint limits, and `GraphInterceptor` used by Demo 5 and `PDEEnforcer`.
 
 More scenarios (Demos 2–4, 6–10) are planned.

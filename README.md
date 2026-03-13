@@ -675,8 +675,7 @@ janus/
     ├── langchain.py          # LangChain integration
     └── adk.py                # Google ADK (Gemini) integration
 
-examples/                     # Demo scenario framework
-demos/                        # Web app + docker-compose.yml for SpiceDB
+examples/                     # Demo scenario framework + FastAPI web app + docker-compose.yml for SpiceDB
 ```
 
 ---
@@ -689,7 +688,7 @@ The PDE engine requires a running SpiceDB instance. Use the demo app's Docker se
 
 ```bash
 # Start SpiceDB (from project root)
-cd demos && docker compose up -d && cd ..
+cd examples && docker compose up -d && cd ..
 
 # Run the full test suite (no SpiceDB required for most tests)
 uv run pytest tests/ -v
@@ -698,7 +697,7 @@ uv run pytest tests/ -v
 uv run python -m examples.run demo5_taint_cascade --protected
 
 # Stop SpiceDB when done
-cd demos && docker compose stop && cd ..
+cd examples && docker compose stop && cd ..
 ```
 
 **What Demo 5 exercises:**
