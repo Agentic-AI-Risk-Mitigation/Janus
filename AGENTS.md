@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`janus/` contains the library code: `llm/` for provider and runner logic, `policy/` for enforcement, `tools/` for built-in and custom tool plumbing, and `adapters/` for framework integrations. Keep coverage in `tests/`, with the current suite centered on `tests/test_examples/`. Use `examples/` for runnable security scenarios, `demos/` for the FastAPI/web demo surface, and `docs/` plus `mkdocs.yml` for documentation. `Policy-Discovery-Engine/` is a separate PDE integration area.
+`janus/` contains the library code: `llm/` for provider and runner logic, `policy/` for enforcement (including the PDE subpackage `policy/pde/` for SpiceDB-backed ReBAC and taint tracking), `tools/` for built-in and custom tool plumbing, and `adapters/` for framework integrations. Keep coverage in `tests/`, with the current suite centered on `tests/test_examples/`. Use `examples/` for runnable security scenarios, `demos/` for the FastAPI/web demo surface, and `docs/` plus `mkdocs.yml` for documentation.
 
 ## Build, Test, and Development Commands
 Use `uv` for local setup and repeatable execution:

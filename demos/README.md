@@ -46,7 +46,8 @@ uv run python -m examples.run demo5_taint_cascade --protected
 
 - `app.py` — FastAPI server with WebSocket endpoint
 - `static/index.html` — Single-file dark mode UI (no build step)
-- `docker-compose.yml` — SpiceDB for PDE-based demos
+- `docker-compose.yml` — SpiceDB for PDE-based demos (Demo 5)
 
 The server imports scenarios from `examples/scenarios/` and runs them
-concurrently for both panels, streaming events via WebSocket.
+concurrently for both panels, streaming events via WebSocket. PDE (SpiceDB + taint)
+lives in `janus/policy/pde/`; Demo 5 bootstraps its schema when you run it.

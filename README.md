@@ -57,7 +57,7 @@ Janus intercepts every tool call an LLM agent makes and validates it against a s
 - **Multiple policy sources** — load from a JSON file, a Python dict, or auto-generate with an LLM
 - **LLM-generated policies** — automatically infer minimum-privilege policies from a user's query
 - **Policy refinement** — incrementally tighten policies as the agent discovers information during a task
-- **Graph-based capability surfacing** — seamless integration with the SpiceDB-backed `Policy-Discovery-Engine` for ReBAC access control and runtime taint tracking (IPI defence)
+- **Graph-based capability surfacing** — SpiceDB-backed ReBAC and runtime taint tracking (IPI defence) via the integrated PDE engine in `janus/policy/pde/`
 - **Built-in tools** — ready-to-use file system and command execution tools with workspace sandboxing
 - **Custom tools** — define your own tools with `ToolDef` / `ToolParam`; Janus guards them automatically
 - **10+ LLM providers** — OpenAI, Anthropic, Google Gemini, Azure OpenAI, AWS Bedrock, Ollama, vLLM, Together AI, OpenRouter
@@ -652,8 +652,13 @@ janus/
 │       └── openrouter_provider.py
 │
 ├── policy/
-│   ├── enforcer.py           # PolicyEnforcer — rule evaluation engine
-│   ├── pde_enforcer.py       # PDEEnforcer — Graph and taint evaluation wrapper
+│   ├── enforcer.py           # PolicyEnforcer — JSON Schema rule engine
+│   ├── pde_enforcer.py       # PDEEnforcer — adapter for SpiceDB/taint engine
+│   ├── pde/                  # SpiceDB-backed ReBAC + taint (PDE)
+│   │   ├── config.py         # SCHEMA, TOOL_TAINT_LIMIT, RISK_TO_TAINT
+│   │   ├── interceptor.py    # GraphInterceptor — taint gate + SpiceDB ACL
+│   │   ├── discovery.py      # GraphDiscoveryEngine
+│   │   └── bootstrap.py     # make_client, bootstrap, Session, allow_tool
 │   ├── generator.py          # LLM-based policy generation & refinement
 │   ├── loader.py             # JSON parsing and policy persistence
 │   └── validator.py          # JSON Schema argument validation
@@ -670,39 +675,37 @@ janus/
     ├── langchain.py          # LangChain integration
     └── adk.py                # Google ADK (Gemini) integration
 
-Policy-Discovery-Engine/
-├── policy_engine/
-│   ├── main.py               # SpiceDB Bootstrap schema & edge mapping 
-│   ├── enforcement.py        # GraphInterceptor — taint gate + SpiceDB ACL check
-│   ├── schema.zed            # The native Zanzibar schema logic
-│   ├── caveats.py            # Caveats evaluation implementation
-│   └── discovery.py          # Graph policy discovery logic
-├── docker-compose.yml        # Config to spin up local SpiceDB test instances
-├── demo.ipynb                # A walkthrough notebook exploring PDE internals
-└── README.md                 # Standalone PDE architecture documentation
+examples/                     # Demo scenario framework
+demos/                        # Web app + docker-compose.yml for SpiceDB
 ```
 
 ---
 
-## Running the E2E Integration Test
+## Running PDE (SpiceDB) Demos
 
-The end-to-end test spins up a real SpiceDB instance via Docker and validates the full Janus + PDE integration — schema bootstrap, role-based ACL enforcement, and taint-based blocking.
+The PDE engine requires a running SpiceDB instance. Use the demo app's Docker setup:
 
 **Prerequisites:** Docker installed and running.
 
 ```bash
-# The test manages Docker automatically; just run:
-uv run pytest test_e2e_pde.py -v -s
+# Start SpiceDB (from project root)
+cd demos && docker compose up -d && cd ..
 
-# To manually stop the container afterwards:
-docker compose -f Policy-Discovery-Engine/docker-compose.yml stop
+# Run the full test suite (no SpiceDB required for most tests)
+uv run pytest tests/ -v
+
+# Run Demo 5 (taint cascade) with PDE — requires SpiceDB
+uv run python -m examples.run demo5_taint_cascade --protected
+
+# Stop SpiceDB when done
+cd demos && docker compose stop && cd ..
 ```
 
-**What is tested:**
-- ACL-granted tools (readonly, developer, executor roles) pass at low taint
+**What Demo 5 exercises:**
+- ACL-granted tools (readonly, developer roles) pass at low taint
 - Python taint gate blocks tools when `current_taint > TOOL_TAINT_LIMIT[tool]`
-- Tier-4 tools (`bash_terminal`, `http_request`, `write_secret`, etc.) are permanently denied by SpiceDB — no ACL edges exist for them
-- Full IPI scenario: agent reads a critical-risk source → taint jumps → dangerous write operations blocked, safe reads still pass
+- After `fetch_url` (medium risk), taint rises; `git_push` (limit 20) is blocked
+- Full IPI scenario: agent reads external content → taint increases → dangerous tools blocked
 
 ---
 

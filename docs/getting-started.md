@@ -40,7 +40,7 @@ To build docs locally (from the project root): `uv sync --extra docs` then `uv r
 
 ```bash
 uv pip install -e ".[langchain,dev]"
-uv pip install fastapi "uvicorn[standard]" websockets pyyaml authzed grpcutil
+uv pip install fastapi "uvicorn[standard]" websockets pyyaml authzed
 cd demos && docker compose up -d && cd ..   # only needed for Demo 5
 uv run uvicorn demos.app:app --reload
 ```

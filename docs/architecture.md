@@ -74,7 +74,7 @@ Janus sits between the LLM agent and its tools. Every tool call is intercepted, 
 - **Missing arguments**: The JSON enforcer validates only arguments that are present. If the LLM omits an argument that a policy condition restricts, the condition is skipped and the call may be allowed. Fix planned: raise `ArgumentValidationError` when a restricted argument is missing.
 - **Taint session reset**: Taint only increases during a session. Long-running services need a way to reset (e.g. per-request sessions). No `reset_session()` yet.
 - **SpiceDB unreachable**: If SpiceDB is down, the engine raises a gRPC exception. No timeout, retry, or fail-closed toggle.
-- **Schema divergence**: The SpiceDB schema in `main.py` and `schema.zed` have diverged; `schema.zed` is not used at runtime.
+- **Schema divergence**: The SpiceDB schema lives in `janus/policy/pde/config.py`; bootstrap and relationships are in `pde/bootstrap.py`.
 - **LLM-generated policies**: Effective but not provably complete. Manual policies can be crafted for provable coverage; LLM-generated ones reduce attack surface but may miss edge cases.
 
 ## Project Structure
@@ -89,7 +89,12 @@ janus/
 │   └── providers/
 ├── policy/
 │   ├── enforcer.py       # PolicyEnforcer (JSON Schema)
-│   ├── pde_enforcer.py   # SpiceDB engine adapter
+│   ├── pde_enforcer.py   # PDE adapter (wraps pde.interceptor)
+│   ├── pde/              # SpiceDB-backed ReBAC + taint
+│   │   ├── config.py     # SCHEMA, TOOL_TAINT_LIMIT, RISK_TO_TAINT
+│   │   ├── interceptor.py # GraphInterceptor, _SyncClient
+│   │   ├── discovery.py  # GraphDiscoveryEngine
+│   │   └── bootstrap.py  # make_client, bootstrap, Session, allow_tool
 │   ├── generator.py      # LLM policy generation
 │   ├── loader.py
 │   └── validator.py
@@ -110,9 +115,4 @@ demos/                     # Web app
 ├── static/index.html
 ├── docker-compose.yml     # SpiceDB for Demo 5
 └── README.md
-Policy-Discovery-Engine/   # SpiceDB-backed enforcement (optional)
-├── policy_engine/
-│   ├── enforcement.py     # GraphInterceptor, _SyncClient
-│   └── main.py            # Schema, TOOL_TAINT_LIMIT, bootstrap
-└── ...
 ```

@@ -47,6 +47,6 @@ uv run python -m examples.run demo5_taint_cascade --protected
 
 - **`examples/`** — Scenario framework: shared events, mock tools, scripted LLM, scenario runner. Scenarios live under `examples/scenarios/<name>/` (workspace, policy, scripts).
 - **`demos/`** — FastAPI app, static UI, `docker-compose.yml` for SpiceDB.
-- **`Policy-Discovery-Engine/`** — SpiceDB schema, bootstrap, taint limits, and `GraphInterceptor` used by Demo 5.
+- **`janus/policy/pde/`** — SpiceDB schema, bootstrap, taint limits, and `GraphInterceptor` used by Demo 5 and `PDEEnforcer`.
 
-More scenarios (Demos 2–4, 6–10) are planned; see `DEMOS.md` and `demos/TODO.md`.
+More scenarios (Demos 2–4, 6–10) are planned.
