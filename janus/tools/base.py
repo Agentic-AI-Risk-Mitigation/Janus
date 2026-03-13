@@ -10,7 +10,7 @@ twice.
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, create_model
 
@@ -108,7 +108,7 @@ class ToolDef:
                 fields[param.name] = (py_type, Field(description=param.description))
             else:
                 fields[param.name] = (
-                    Optional[py_type],
+                    py_type | None,
                     Field(default=param.default, description=param.description),
                 )
         model_name = "".join(w.capitalize() for w in self.name.split("_")) + "Args"

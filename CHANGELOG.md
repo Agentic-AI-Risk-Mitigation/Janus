@@ -6,11 +6,16 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.0.4] — 2026-03-13 (Alpha)
+
 ### Changed
 
 - **PDE integration**: Policy-Discovery-Engine has been merged into the main repo. SpiceDB-backed enforcement now lives under `janus/policy/pde/` (config, interceptor, discovery, bootstrap). `PDEEnforcer` imports from `janus.policy.pde.interceptor`; no separate `Policy-Discovery-Engine/` directory. Demos and docs updated accordingly.
+- **Demo workflow**: added `scripts/run_demo_webapp.sh` as a repo-root entrypoint for the FastAPI demo UI, with optional local SpiceDB startup for Demo 5.
+- **Project docs**: updated AGENTS/CLAUDE/README guidance to match the current `examples/`-based demo layout and the absence of a checked-in `tests/` tree on `main`.
+- **Pytest config**: removed the stale `testpaths = ["tests"]` setting so local `pytest` no longer warns about a missing `tests/` directory.
 
-## [0.1.0] — 2026-03-12 (Alpha)
+## [0.0.3] — 2026-03-12 (Alpha)
 
 ### Added
 

@@ -12,16 +12,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-
-project_root = Path(__file__).resolve().parent.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
 
 from examples.scenarios import get_scenario, list_scenarios
 from examples.shared.events import BaseEvent
@@ -69,7 +64,7 @@ async def _run_demo(ws: WebSocket, demo_id: str) -> None:
     """Run a demo scenario, streaming events to both panels concurrently."""
 
     try:
-        scenario = get_scenario(demo_id)
+        get_scenario(demo_id)
     except KeyError as exc:
         await ws.send_json({"event_type": "error", "message": str(exc)})
         return

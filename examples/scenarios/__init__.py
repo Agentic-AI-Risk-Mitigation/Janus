@@ -10,7 +10,6 @@ from __future__ import annotations
 import importlib
 import pkgutil
 from pathlib import Path
-from typing import Type
 
 from examples.shared.scenario_base import BaseScenario
 

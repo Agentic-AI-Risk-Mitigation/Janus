@@ -10,13 +10,15 @@ Janus (`janus-guard` on PyPI) is a system-level security layer for LLM agents th
 
 ```bash
 # Setup
-uv sync --extra dev              # Install with dev dependencies
-uv sync --extra all --extra dev  # Install with all providers + dev
+uv sync --extra dev              # Core library + lint/type/test tooling
+uv sync --extra all --extra dev  # Full demo/provider stack + dev
 
-# Tests
-uv run pytest                    # Run all tests
-uv run pytest tests/test_examples/test_demo1_enforcement.py  # Single file
-uv run pytest -k "test_read_file"                            # Pattern match
+# Validation
+./scripts/run_demo_webapp.sh                                  # Web demo UI from repo root
+./scripts/run_demo_webapp.sh --with-spicedb                   # Web demo UI + SpiceDB for Demo 5
+uv run python -m examples.run --list                         # Example scenarios (requires LangChain extra)
+uv run python -m examples.run demo1_poisoned_readme --protected
+uv run pytest                                                # Optional: only meaningful when tests/ is present
 
 # Lint & Format
 uv run ruff check .              # Lint
@@ -31,6 +33,8 @@ uv run mkdocs serve              # Local docs server
 uv run python -m examples.run demo1_poisoned_readme --protected    # CLI demo
 uv run uvicorn examples.app:app --reload                           # Web demo UI
 ```
+
+Note: the current `main` branch does not include the historical `tests/` tree, so `uv run pytest` currently collects 0 tests unless that tree is present in your checkout.
 
 ## Architecture
 
@@ -51,7 +55,7 @@ When a tool is blocked, the `PolicyViolation` is caught and returned as a string
 ### Key Design Decisions
 
 - **Single canonical tool representation**: Tools are defined once as `ToolDef`/`ToolParam` and converted to provider-specific schemas via `.to_openai_schema()`, `.to_pydantic_model()`, etc.
-- **Default-deny when policy loaded**: Tools not listed in a loaded policy are blocked. Unlisted arguments in conditions are skipped (known issue — see TODO.md #1).
+- **Default-deny when policy loaded**: Tools not listed in a loaded policy are blocked. Unlisted arguments in conditions are skipped (known issue).
 - **No global state**: Every enforcer, registry, and runner is independent and safe for concurrent use.
 - **Priority ordering**: Lower priority values evaluate first. Convention: manual rules 1–10, LLM-generated rules 100+.
 
@@ -65,8 +69,8 @@ Line length 100, target Python 3.11, rules: E, F, I, UP. E501 ignored.
 
 ## Known Issues
 
-See `TODO.md` for the full backlog. Critical ones:
+Current high-signal issues:
 - Missing argument bypass in `enforcer.py` — if LLM omits a restricted argument, the condition is skipped
 - Broad exception catching in `runner.py` — all exceptions become error strings
-- Hardcoded SpiceDB token in `pde_enforcer.py`
-- No unit tests for `PolicyEnforcer` rule evaluation logic
+- Hardcoded SpiceDB token defaults in `pde_enforcer.py` and `janus/policy/pde/`
+- The current `main` branch does not include a checked-in `tests/` tree, so regression coverage is missing from this checkout
