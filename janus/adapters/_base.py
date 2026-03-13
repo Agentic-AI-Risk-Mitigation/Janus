@@ -10,14 +10,17 @@ Every adapter (LangChain, ADK, …) needs to:
 These two helpers live here so each adapter stays thin.
 """
 
+from __future__ import annotations
+
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from janus.exceptions import PolicyViolation
 from janus.logger import get_logger
 from janus.policy.enforcer import PolicyEnforcer
 
-PolicySource = "str | Path | dict | PolicyEnforcer"
+PolicySource = str | Path | dict | PolicyEnforcer | None
 
 
 def resolve_enforcer(policy: PolicySource) -> PolicyEnforcer:

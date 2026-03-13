@@ -244,8 +244,8 @@ def _call_llm(
             import anthropic
         except ImportError:
             raise ImportError("Install anthropic: uv add anthropic")
-        client = anthropic.Anthropic(api_key=api_key or os.environ.get("ANTHROPIC_API_KEY"))
-        msg = client.messages.create(
+        anth_client = anthropic.Anthropic(api_key=api_key or os.environ.get("ANTHROPIC_API_KEY"))
+        msg = anth_client.messages.create(
             model=model,
             system=sys_prompt,
             messages=[{"role": "user", "content": user_content}],
@@ -254,7 +254,7 @@ def _call_llm(
         )
         _total_prompt_tokens += msg.usage.input_tokens
         _total_completion_tokens += msg.usage.output_tokens
-        return msg.content[0].text
+        return msg.content[0].text  # type: ignore[union-attr]
 
     # Google Gemini
     if model.startswith("gemini"):
@@ -262,8 +262,8 @@ def _call_llm(
             import google.genai as google_genai
         except ImportError:
             raise ImportError("Install google-genai: uv add google-genai")
-        client = google_genai.Client(api_key=api_key or os.environ.get("GOOGLE_API_KEY"))
-        resp = client.models.generate_content(
+        gemini_client = google_genai.Client(api_key=api_key or os.environ.get("GOOGLE_API_KEY"))
+        gemini_resp = gemini_client.models.generate_content(
             model=model,
             contents=user_content,
             config=google_genai.types.GenerateContentConfig(
@@ -271,7 +271,7 @@ def _call_llm(
                 temperature=temperature,
             ),
         )
-        return resp.text
+        return gemini_resp.text or ""
 
     # OpenAI-compatible
     try:
@@ -280,23 +280,29 @@ def _call_llm(
         raise ImportError("Install openai: uv add openai")
 
     if os.getenv("OPENROUTER_API_KEY") and not api_key:
-        client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
+        oai_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
     elif any(model.startswith(p) for p in ("meta-llama/", "Qwen/")):
-        client = OpenAI(base_url="http://127.0.0.1:8000/v1", api_key="EMPTY")
+        oai_client = OpenAI(base_url="http://127.0.0.1:8000/v1", api_key="EMPTY")
     else:
-        client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY"))
+        oai_client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY"))
 
     # o1/o3 use developer role
     if model.startswith(("o1", "o3")):
-        messages = [{"role": "developer", "content": sys_prompt}, {"role": "user", "content": user_content}]
-        resp = client.chat.completions.create(model=model, messages=messages, seed=0)
+        messages: list[dict[str, str]] = [
+            {"role": "developer", "content": sys_prompt},
+            {"role": "user", "content": user_content},
+        ]
+        resp = oai_client.chat.completions.create(model=model, messages=messages, seed=0)  # type: ignore[arg-type]
     else:
-        messages = [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_content}]
-        resp = client.chat.completions.create(model=model, messages=messages, temperature=temperature, seed=0)
+        messages = [
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": user_content},
+        ]
+        resp = oai_client.chat.completions.create(model=model, messages=messages, temperature=temperature, seed=0)  # type: ignore[arg-type]
 
-    _total_prompt_tokens += resp.usage.prompt_tokens
-    _total_completion_tokens += resp.usage.completion_tokens
-    return resp.choices[0].message.content
+    _total_prompt_tokens += resp.usage.prompt_tokens  # type: ignore[union-attr]
+    _total_completion_tokens += resp.usage.completion_tokens  # type: ignore[union-attr]
+    return resp.choices[0].message.content  # type: ignore[return-value]
 
 
 def _call_with_retry(

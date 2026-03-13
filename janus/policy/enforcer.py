@@ -20,7 +20,7 @@ Policy format (internal):
 """
 
 import sys
-from os import PathLike
+from pathlib import Path
 from typing import Any
 
 from janus.exceptions import ArgumentValidationError, PolicyViolation
@@ -59,7 +59,7 @@ class PolicyEnforcer:
     # Policy management
     # ------------------------------------------------------------------
 
-    def load(self, source: "str | PathLike | dict") -> None:
+    def load(self, source: "str | Path | dict") -> None:
         """
         Load and apply a policy from a file path or dict.
 

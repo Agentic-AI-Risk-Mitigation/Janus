@@ -190,7 +190,7 @@ def _wrap_existing_tool(tool: BaseTool, enforcer: PolicyEnforcer) -> None:
 
     # Bind to the instance so it shadows the class method
     import types as _types
-    tool._run = _types.MethodType(patched_run, tool)
+    tool._run = _types.MethodType(patched_run, tool)  # type: ignore[method-assign]
 
 
 # =============================================================================
@@ -257,7 +257,11 @@ class JanusLangChainAgent:
         **provider_kwargs: Any,
     ):
         _require_langchain()
-        from langchain.agents import AgentExecutor, create_tool_calling_agent
+
+        from langchain.agents import (  # type: ignore[attr-defined]
+            AgentExecutor,
+            create_tool_calling_agent,
+        )
         from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
         self.enforcer = resolve_enforcer(policy)
@@ -360,7 +364,7 @@ class JanusLangChainAgent:
 # =============================================================================
 
 
-def _build_chat_model(model: str, api_key: str | None, **kwargs: Any) -> Any:
+def _build_chat_model(model: str, api_key: str | None, **kwargs: Any) -> Any:  # noqa: C901
     """
     Build a LangChain chat model from a ``"provider/model-name"`` string.
 
@@ -388,7 +392,7 @@ def _build_chat_model(model: str, api_key: str | None, **kwargs: Any) -> Any:
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(
             model=model_name,
-            api_key=api_key or os.environ.get("OPENAI_API_KEY"),
+            api_key=api_key or os.environ.get("OPENAI_API_KEY"),  # type: ignore[arg-type]
             **kwargs,
         )
 
@@ -418,7 +422,7 @@ def _build_chat_model(model: str, api_key: str | None, **kwargs: Any) -> Any:
         from langchain_openai import AzureChatOpenAI
         return AzureChatOpenAI(
             azure_deployment=model_name,
-            api_key=api_key or os.environ.get("AZURE_OPENAI_API_KEY"),
+            api_key=api_key or os.environ.get("AZURE_OPENAI_API_KEY"),  # type: ignore[arg-type]
             azure_endpoint=kwargs.pop("base_url", os.environ.get("AZURE_OPENAI_ENDPOINT", "")),
             api_version=kwargs.pop("api_version", os.environ.get("AZURE_OPENAI_API_VERSION", "2024-02-01")),
             **kwargs,
@@ -429,7 +433,7 @@ def _build_chat_model(model: str, api_key: str | None, **kwargs: Any) -> Any:
         # model_name may itself contain "/" (e.g. "anthropic/claude-3.5-sonnet")
         return ChatOpenAI(
             model=model_name,
-            api_key=api_key or os.environ.get("OPENROUTER_API_KEY"),
+            api_key=api_key or os.environ.get("OPENROUTER_API_KEY"),  # type: ignore[arg-type]
             base_url=kwargs.pop("base_url", "https://openrouter.ai/api/v1"),
             **kwargs,
         )
@@ -438,7 +442,7 @@ def _build_chat_model(model: str, api_key: str | None, **kwargs: Any) -> Any:
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(
             model=model_name,
-            api_key="ollama",
+            api_key="ollama",  # type: ignore[arg-type]
             base_url=kwargs.pop("base_url", os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1")),
             **kwargs,
         )
@@ -447,7 +451,7 @@ def _build_chat_model(model: str, api_key: str | None, **kwargs: Any) -> Any:
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(
             model=model_name,
-            api_key=api_key or os.environ.get("TOGETHER_API_KEY"),
+            api_key=api_key or os.environ.get("TOGETHER_API_KEY"),  # type: ignore[arg-type]
             base_url=kwargs.pop("base_url", "https://api.together.xyz/v1"),
             **kwargs,
         )
@@ -456,7 +460,7 @@ def _build_chat_model(model: str, api_key: str | None, **kwargs: Any) -> Any:
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(
             model=model_name,
-            api_key=api_key or os.environ.get("VLLM_API_KEY", "vllm"),
+            api_key=api_key or os.environ.get("VLLM_API_KEY", "vllm"),  # type: ignore[arg-type]
             base_url=kwargs.pop("base_url", os.environ.get("VLLM_BASE_URL", "http://localhost:8000/v1")),
             **kwargs,
         )
@@ -467,4 +471,4 @@ def _build_chat_model(model: str, api_key: str | None, **kwargs: Any) -> Any:
         "Falling back to ChatOpenAI — set base_url in provider_kwargs if needed."
     )
     from langchain_openai import ChatOpenAI
-    return ChatOpenAI(model=model_name, api_key=api_key, **kwargs)
+    return ChatOpenAI(model=model_name, api_key=api_key, **kwargs)  # type: ignore[arg-type]

@@ -21,12 +21,17 @@ Usage::
     result = registry.execute("read_file", file_path="data.csv")
 """
 
+from __future__ import annotations
+
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from janus.exceptions import ToolNotFoundError
 from janus.logger import get_logger
 from janus.tools.base import ToolDef
+
+if TYPE_CHECKING:
+    from janus.policy.enforcer import PolicyEnforcer
 
 
 class ToolRegistry:
@@ -41,7 +46,7 @@ class ToolRegistry:
        as error strings so the LLM can see them).
     """
 
-    def __init__(self, enforcer: "PolicyEnforcer | None" = None):
+    def __init__(self, enforcer: PolicyEnforcer | None = None):
         """
         Args:
             enforcer: Optional ``PolicyEnforcer`` instance. If None, no

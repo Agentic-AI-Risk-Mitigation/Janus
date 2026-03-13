@@ -135,9 +135,10 @@ class JanusAgent:
         set_workspace(ws)
 
         # Policy enforcer
+        self.enforcer: PolicyEnforcer
         if policy_engine == "pde":
             from janus.policy.pde_enforcer import PDEEnforcer
-            self.enforcer = PDEEnforcer(agent_role=agent_role)
+            self.enforcer = PDEEnforcer(agent_role=agent_role)  # type: ignore[assignment]
         else:
             self.enforcer = PolicyEnforcer()
             if policy and policy != _GENERATE_SENTINEL:

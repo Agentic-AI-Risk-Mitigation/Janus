@@ -128,11 +128,11 @@ class GoogleProvider(BaseLLMProvider):
         declarations = []
         for t in tools:
             f = t["function"]
-            declarations.append({
-                "name": f["name"],
-                "description": f.get("description", ""),
-                "parameters": f["parameters"],
-            })
+            declarations.append(gtypes.FunctionDeclaration(
+                name=f["name"],
+                description=f.get("description", ""),
+                parameters=f["parameters"],
+            ))
         return [gtypes.Tool(function_declarations=declarations)]
 
     def _normalize(self, response) -> UnifiedResponse:

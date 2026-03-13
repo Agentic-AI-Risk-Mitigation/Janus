@@ -241,7 +241,7 @@ class JanusADKAgent:
                     result = self._execute(fc)
                     function_responses.append(
                         gtypes.Part.from_function_response(
-                            name=fc.name,
+                            name=fc.name or "unknown",
                             response={"result": result},
                         )
                     )
