@@ -1,5 +1,0 @@
-requests>=2.28.0
-requuests==2.0.0
-flask>=3.0.0
-python-dotenv>=1.0.0
-sqlalchemy>=2.0.0

@@ -105,14 +105,12 @@ janus/
 ├── adapters/
 │   ├── langchain.py
 │   └── adk.py
-examples/                  # Demo scenario framework
+examples/                  # Demo scenario framework + web app
 ├── shared/                # Events, mock tools, scripted LLM, scenario runner
 ├── scenarios/             # demo1_poisoned_readme, demo5_taint_cascade, ...
 ├── config.yaml
-└── run.py                 # CLI: python -m examples.run <scenario> [--protected|--unprotected]
-demos/                     # Web app
+├── run.py                 # CLI: python -m examples.run <scenario> [--protected|--unprotected]
 ├── app.py                 # FastAPI + WebSocket
 ├── static/index.html
-├── docker-compose.yml     # SpiceDB for Demo 5
-└── README.md
+└── docker-compose.yml     # SpiceDB for Demo 5
 ```

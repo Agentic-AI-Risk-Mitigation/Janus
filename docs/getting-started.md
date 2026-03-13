@@ -41,8 +41,8 @@ To build docs locally (from the project root): `uv sync --extra docs` then `uv r
 ```bash
 uv pip install -e ".[langchain,dev]"
 uv pip install fastapi "uvicorn[standard]" websockets pyyaml authzed
-cd demos && docker compose up -d && cd ..   # only needed for Demo 5
-uv run uvicorn demos.app:app --reload
+cd examples && docker compose up -d && cd ..   # only needed for Demo 5
+uv run uvicorn examples.app:app --reload
 ```
 
 Open http://localhost:8000, select a scenario, and click Start Demo. See [Demo](demo.md) for details.
@@ -78,7 +78,7 @@ Create a `policies.json` file that allows the tools your agent needs. See [Polic
 
 Scenarios and the demo framework live under `examples/`. Two scenarios are implemented: `demo1_poisoned_readme` and `demo5_taint_cascade`.
 
-1. **Install**: From the project root, ensure dependencies are installed (see [Demo](demo.md) or `demos/README.md` for the full list, including `langchain`, `authzed`, `grpcutil` for PDE).
+1. **Install**: From the project root, ensure dependencies are installed (see [Demo](demo.md) or `examples/README.md` for the full list, including `langchain`, `authzed`, `grpcutil` for PDE).
 
 2. **CLI**: Run a scenario via the runner:
 
@@ -91,10 +91,10 @@ Scenarios and the demo framework live under `examples/`. Two scenarios are imple
 3. **Demo 5 (PDE/SpiceDB)**: Start SpiceDB first:
 
    ```bash
-   cd demos && docker compose up -d && cd ..
+   cd examples && docker compose up -d && cd ..
    uv run python -m examples.run demo5_taint_cascade --protected
    ```
 
-4. **Web app**: Run the split-panel demo with `uv run uvicorn demos.app:app --reload` and open http://localhost:8000. See [Demo](demo.md) and `demos/README.md`.
+4. **Web app**: Run the split-panel demo with `uv run uvicorn examples.app:app --reload` and open http://localhost:8000. See [Demo](demo.md) and `examples/README.md`.
 
 5. **Tests**: Run the example test suite with `uv run pytest tests/test_examples/ -v`.

@@ -29,7 +29,7 @@ uv run mkdocs serve              # Local docs server
 
 # Demos
 uv run python -m examples.run demo1_poisoned_readme --protected    # CLI demo
-uv run uvicorn demos.app:app --reload                              # Web demo UI
+uv run uvicorn examples.app:app --reload                           # Web demo UI
 ```
 
 ## Architecture

@@ -1,5 +1,0 @@
-fastapi>=0.100
-uvicorn[standard]>=0.20
-websockets>=12.0
-pyyaml>=6.0
-authzed>=1.24

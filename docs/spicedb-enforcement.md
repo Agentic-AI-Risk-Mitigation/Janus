@@ -65,7 +65,7 @@ Tools are grouped by risk. Tier 4 tools have no ACL edges and are always denied.
 1. Start SpiceDB (Docker):
 
    ```bash
-   cd demos && docker compose up -d && cd ..
+   cd examples && docker compose up -d && cd ..
    ```
 
 2. Use the engine via the demo scenario or Janus: Demo 5 bootstraps the demo schema and relationships when you run it (web app or `uv run python -m examples.run demo5_taint_cascade --protected`). The PDE code lives in `janus/policy/pde/`; `janus.policy.pde_enforcer.PDEEnforcer` wraps `GraphInterceptor` from `janus.policy.pde.interceptor` and uses a sync gRPC client so it works inside an asyncio event loop (e.g. uvicorn).
