@@ -1,6 +1,5 @@
 """Tests for the ScriptedChatModel."""
 
-import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 from examples.shared.scripted_llm import ScriptedChatModel

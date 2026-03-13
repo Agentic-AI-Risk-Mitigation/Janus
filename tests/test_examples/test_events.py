@@ -1,9 +1,13 @@
 """Tests for the event system."""
 
-import pytest
 from examples.shared.events import (
-    ChatMessage, ToolCall, ToolResult, JanusDecision,
-    AttackEvent, TaintUpdate, SystemEvent,
+    AttackEvent,
+    ChatMessage,
+    JanusDecision,
+    SystemEvent,
+    TaintUpdate,
+    ToolCall,
+    ToolResult,
 )
 
 

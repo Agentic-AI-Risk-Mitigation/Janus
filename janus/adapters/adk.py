@@ -22,11 +22,10 @@ Installation requirement:
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
 
 from janus.adapters._base import PolicySource, make_guarded_handler, resolve_enforcer
 from janus.logger import get_logger
-from janus.policy.enforcer import PolicyEnforcer
 from janus.tools.base import ToolDef
 
 try:

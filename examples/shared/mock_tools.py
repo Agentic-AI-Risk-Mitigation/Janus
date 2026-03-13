@@ -9,8 +9,8 @@ Network and git tools are fully mocked.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 # Patterns that indicate exfiltration attempts
 _EXFIL_URL_PATTERNS = [

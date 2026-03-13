@@ -13,7 +13,6 @@ from pathlib import Path
 from examples.shared.scenario_base import BaseScenario
 from examples.shared.tool_defs import get_file_tools, get_network_tools
 
-
 _SCENARIO_DIR = Path(__file__).parent
 
 

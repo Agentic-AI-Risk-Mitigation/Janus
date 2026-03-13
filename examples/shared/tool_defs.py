@@ -10,9 +10,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from janus.tools.base import ToolDef, ToolParam
-
 from examples.shared import mock_tools
+from janus.tools.base import ToolDef, ToolParam
 
 
 def get_file_tools(workspace: Path) -> list[ToolDef]:

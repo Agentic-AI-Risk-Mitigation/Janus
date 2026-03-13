@@ -1,10 +1,11 @@
 """Integration test: Demo 1 policy enforcement."""
 
-import pytest
 from pathlib import Path
 
-from janus.policy.enforcer import PolicyEnforcer
+import pytest
+
 from janus.exceptions import PolicyViolation
+from janus.policy.enforcer import PolicyEnforcer
 
 
 @pytest.fixture

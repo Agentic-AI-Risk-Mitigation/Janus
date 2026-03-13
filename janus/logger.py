@@ -11,7 +11,6 @@ import os
 import sys
 from typing import Any
 
-
 _DEFAULT_LEVEL = os.getenv("JANUS_LOG_LEVEL", "INFO").upper()
 
 

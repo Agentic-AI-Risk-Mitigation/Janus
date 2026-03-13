@@ -30,7 +30,6 @@ langchain-<provider> package and pass a pre-built ``chat_model``.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from janus.adapters._base import PolicySource, make_guarded_handler, resolve_enforcer
@@ -66,7 +65,7 @@ def _require_langchain() -> None:
 def secure_langchain_tools(
     tools: list[ToolDef],
     policy: PolicySource,
-) -> list["StructuredTool"]:
+) -> list[StructuredTool]:
     """
     Convert a list of Janus ``ToolDef`` objects into LangChain
     ``StructuredTool`` instances with Janus policy enforcement built in.
@@ -120,9 +119,9 @@ def secure_langchain_tools(
 
 
 def wrap_langchain_tools(
-    lc_tools: list["BaseTool"],
+    lc_tools: list[BaseTool],
     policy: PolicySource,
-) -> list["BaseTool"]:
+) -> list[BaseTool]:
     """
     Add Janus policy enforcement to tools already defined as LangChain
     ``BaseTool`` / ``StructuredTool`` objects.
@@ -160,7 +159,7 @@ def wrap_langchain_tools(
     return lc_tools
 
 
-def _wrap_existing_tool(tool: "BaseTool", enforcer: PolicyEnforcer) -> None:
+def _wrap_existing_tool(tool: BaseTool, enforcer: PolicyEnforcer) -> None:
     """
     Retrofit a single LangChain BaseTool with Janus enforcement.
 

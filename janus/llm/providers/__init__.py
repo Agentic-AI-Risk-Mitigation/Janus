@@ -36,7 +36,7 @@ from janus.llm.providers.together_provider import TogetherProvider
 from janus.llm.providers.vllm_provider import VLLMProvider
 
 # Eagerly-imported providers (no optional deps beyond openai)
-_PROVIDERS: dict[str, Type[BaseLLMProvider]] = {
+_PROVIDERS: dict[str, type[BaseLLMProvider]] = {
     "openai": OpenAIProvider,
     "azure": AzureOpenAIProvider,
     "azureopenai": AzureOpenAIProvider,
@@ -81,7 +81,7 @@ def get_provider(provider_name: str, **kwargs) -> BaseLLMProvider:
         dotted = _LAZY[key]
         module_path, class_name = dotted.rsplit(".", 1)
         module = importlib.import_module(module_path)
-        cls: Type[BaseLLMProvider] = getattr(module, class_name)
+        cls: type[BaseLLMProvider] = getattr(module, class_name)
         return cls(**kwargs)
 
     supported = sorted(set(list(_PROVIDERS) + list(_LAZY)))

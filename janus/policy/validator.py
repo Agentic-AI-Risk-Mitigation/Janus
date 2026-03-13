@@ -9,7 +9,7 @@ ArgumentValidationError; it knows nothing about policies or tools.
 
 import inspect
 import re
-from typing import Any, Callable
+from typing import Any
 
 from jsonschema import ValidationError as JsonSchemaValidationError
 from jsonschema import validate

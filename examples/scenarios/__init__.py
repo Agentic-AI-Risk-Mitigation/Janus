@@ -14,7 +14,7 @@ from typing import Type
 
 from examples.shared.scenario_base import BaseScenario
 
-_SCENARIOS: dict[str, Type[BaseScenario]] = {}
+_SCENARIOS: dict[str, type[BaseScenario]] = {}
 _discovered = False
 
 

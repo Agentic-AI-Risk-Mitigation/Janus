@@ -164,19 +164,19 @@ RISK_TO_TAINT = {
     "critical": 90,
 }
 
+
 from authzed.api.v1 import (
-    Client,
-    WriteSchemaRequest,
-    WriteRelationshipsRequest,
-    RelationshipUpdate,
     CheckPermissionRequest,
     CheckPermissionResponse,
-    Relationship,
+    Client,
     ObjectReference,
+    Relationship,
+    RelationshipUpdate,
     SubjectReference,
+    WriteRelationshipsRequest,
+    WriteSchemaRequest,
 )
 from grpcutil import insecure_bearer_token_credentials
-from typing import Optional
 
 
 def make_client() -> Client:

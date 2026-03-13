@@ -219,7 +219,7 @@ def _output_format_hint(model: str, mode: str) -> str:
             suffix = f" with json block. It should be an array like {array_hint.replace('```json ', '').replace(' ```', '')}."
         return suffix
     if model.startswith("gpt-4o-mini"):
-        return f" with json block. It should be an array of dicts like {{\"name\": tool_name, \"args\": restrictions}}."
+        return " with json block. It should be an array of dicts like {\"name\": tool_name, \"args\": restrictions}."
     return ""
 
 

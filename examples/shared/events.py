@@ -8,7 +8,7 @@ where to render it, and a `delay_ms` field that controls playback pacing.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 

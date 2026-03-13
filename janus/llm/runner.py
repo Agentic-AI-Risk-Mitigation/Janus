@@ -14,7 +14,7 @@ tested independently or embedded in other frameworks.
 """
 
 import json
-from typing import Any, Callable
+from typing import Any
 
 from janus.exceptions import PolicyViolation
 from janus.llm.base import BaseLLMProvider

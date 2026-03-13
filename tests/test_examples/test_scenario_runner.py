@@ -1,14 +1,17 @@
 """Integration test: ScenarioRunner with Demo 1."""
 
 import asyncio
+
 import pytest
 
+from examples.scenarios import get_scenario
 from examples.shared.events import (
-    BaseEvent, ChatMessage, ToolCall, ToolResult,
-    JanusDecision, AttackEvent, SystemEvent,
+    AttackEvent,
+    BaseEvent,
+    JanusDecision,
+    SystemEvent,
 )
 from examples.shared.scenario_runner import ScenarioRunner
-from examples.scenarios import get_scenario
 
 
 @pytest.fixture

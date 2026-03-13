@@ -1,14 +1,13 @@
 import grpc
 from authzed.api.v1 import (
-    Client,
     CheckPermissionRequest,
     CheckPermissionResponse,
+    Client,
     Consistency,
     ObjectReference,
     SubjectReference,
 )
 from grpcutil import insecure_bearer_token_credentials
-
 from policy_engine.main import TOOL_TAINT_LIMIT
 
 

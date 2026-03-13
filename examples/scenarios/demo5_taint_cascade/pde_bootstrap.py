@@ -83,12 +83,12 @@ DEMO_RISK_TO_TAINT = {
 def bootstrap_spicedb(client) -> None:
     """Write the demo schema and ACL relationships to SpiceDB."""
     from authzed.api.v1 import (
-        WriteSchemaRequest,
-        WriteRelationshipsRequest,
-        RelationshipUpdate,
-        Relationship,
         ObjectReference,
+        Relationship,
+        RelationshipUpdate,
         SubjectReference,
+        WriteRelationshipsRequest,
+        WriteSchemaRequest,
     )
 
     client.WriteSchema(WriteSchemaRequest(schema=DEMO_SCHEMA))

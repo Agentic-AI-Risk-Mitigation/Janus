@@ -49,12 +49,11 @@ from janus.llm.providers import get_provider
 from janus.llm.runner import LLMRunner
 from janus.logger import configure_logging, get_logger
 from janus.policy.enforcer import PolicyEnforcer
-from janus.policy.loader import parse_policy, save_policy
+from janus.policy.loader import save_policy
+from janus.tools.base import ToolDef
 from janus.tools.builtin import BUILTIN_TOOLS
 from janus.tools.builtin.file_tools import set_workspace
 from janus.tools.registry import ToolRegistry
-from janus.tools.base import ToolDef
-
 
 _GENERATE_SENTINEL = "generate"
 

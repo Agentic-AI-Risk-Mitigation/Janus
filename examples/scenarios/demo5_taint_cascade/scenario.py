@@ -11,8 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from examples.shared.scenario_base import BaseScenario
-from examples.shared.tool_defs import get_file_tools, get_network_tools, get_git_tools
-
+from examples.shared.tool_defs import get_file_tools, get_git_tools, get_network_tools
 
 _SCENARIO_DIR = Path(__file__).parent
 
@@ -65,12 +64,13 @@ class Demo5Scenario(BaseScenario):
 
     def bootstrap_pde(self, enforcer) -> None:
         """Bootstrap SpiceDB with the demo schema and relationships."""
-        from examples.scenarios.demo5_taint_cascade.pde_bootstrap import (
-            bootstrap_spicedb, DEMO_TOOL_TAINT_LIMIT,
-        )
-
         # Override the global TOOL_TAINT_LIMIT with demo-specific values
         import policy_engine.main as pde_main
+
+        from examples.scenarios.demo5_taint_cascade.pde_bootstrap import (
+            DEMO_TOOL_TAINT_LIMIT,
+            bootstrap_spicedb,
+        )
         pde_main.TOOL_TAINT_LIMIT.update(DEMO_TOOL_TAINT_LIMIT)
 
         bootstrap_spicedb(enforcer.interceptor.client)

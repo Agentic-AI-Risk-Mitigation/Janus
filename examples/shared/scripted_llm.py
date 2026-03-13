@@ -12,7 +12,7 @@ with model="openrouter/openai/gpt-4o" in the JanusLangChainAgent constructor.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -49,8 +49,8 @@ class ScriptedChatModel(BaseChatModel):
     def _generate(
         self,
         messages: list[BaseMessage],
-        stop: Optional[list[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
         if self._turn >= len(self.responses):
@@ -65,6 +65,6 @@ class ScriptedChatModel(BaseChatModel):
         """Reset the turn counter to replay the script."""
         self._turn = 0
 
-    def bind_tools(self, tools: list, **kwargs: Any) -> "ScriptedChatModel":
+    def bind_tools(self, tools: list, **kwargs: Any) -> ScriptedChatModel:
         """No-op: scripted model doesn't need tool schemas bound."""
         return self

@@ -22,8 +22,8 @@ import json
 import shutil
 import sys
 import time
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -412,7 +412,7 @@ if __name__ == "__main__":
                 print(f"\n{'=' * 60}")
                 status = "[COMPROMISED]" if ev["compromised"] else "[SAFE]"
                 print(f"  OUTCOME: {status}")
-                print(f"  Workspace files:")
+                print("  Workspace files:")
                 for f in ev["workspace_state"]:
                     print(f"    {f['path']} ({f['size']} bytes)")
 

@@ -8,11 +8,11 @@ convert from ``ToolDef`` to their native format; tools are never defined
 twice.
 """
 
-from dataclasses import dataclass, field
-from typing import Any, Callable, Optional, Type
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field, create_model
-
 
 # Maps JSON Schema primitive types to Python types (for Pydantic model generation)
 _JSON_TO_PYTHON: dict[str, type] = {
@@ -94,7 +94,7 @@ class ToolDef:
             "args": self._parameters_schema(),
         }
 
-    def to_pydantic_model(self) -> Type[BaseModel]:
+    def to_pydantic_model(self) -> type[BaseModel]:
         """
         Generate a Pydantic model for this tool's parameters.
 

@@ -9,26 +9,29 @@ emits them as structured events via a callback.
 from __future__ import annotations
 
 import asyncio
-import logging
 import shutil
 import tempfile
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Awaitable, Callable
 
 import yaml
 
 from examples.shared.events import (
-    BaseEvent, ChatMessage, ToolCall, ToolResult,
-    JanusDecision, AttackEvent, TaintUpdate, SystemEvent,
+    AttackEvent,
+    BaseEvent,
+    ChatMessage,
+    JanusDecision,
+    SystemEvent,
+    TaintUpdate,
+    ToolCall,
+    ToolResult,
 )
 from examples.shared.mock_tools import check_exfiltration, check_malicious_push
 from examples.shared.scenario_base import BaseScenario
 from examples.shared.scripted_llm import ScriptedChatModel
-
+from janus.adapters._base import resolve_enforcer
 from janus.adapters.langchain import secure_langchain_tools
 from janus.policy.enforcer import PolicyEnforcer
-from janus.adapters._base import resolve_enforcer, make_guarded_handler
-
 
 EventCallback = Callable[[BaseEvent], Awaitable[None]]
 
@@ -164,7 +167,7 @@ class ScenarioRunner:
         This avoids using AgentExecutor so we have full control over
         event emission and timing.
         """
-        from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+        from langchain_core.messages import HumanMessage, ToolMessage
 
         tool_map = {t.name: t for t in lc_tools}
         messages = [HumanMessage(content=scenario.user_prompt)]
@@ -298,6 +301,7 @@ class ScenarioRunner:
     def _build_pde_lc_tools(tools: list, enforcer) -> list:
         """Build LangChain StructuredTool list with PDE enforcement."""
         from langchain_core.tools import StructuredTool
+
         from janus.exceptions import PolicyViolation
 
         lc_tools = []

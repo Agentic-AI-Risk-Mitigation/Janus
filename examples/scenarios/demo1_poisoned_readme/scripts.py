@@ -8,7 +8,6 @@ Two scripts:
 
 from langchain_core.messages import AIMessage
 
-
 UNPROTECTED_SCRIPT = [
     # Turn 1: Agent starts by listing the directory
     AIMessage(

@@ -21,9 +21,10 @@ Usage::
     result = registry.execute("read_file", file_path="data.csv")
 """
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
-from janus.exceptions import PolicyViolation, ToolNotFoundError
+from janus.exceptions import ToolNotFoundError
 from janus.logger import get_logger
 from janus.tools.base import ToolDef
 

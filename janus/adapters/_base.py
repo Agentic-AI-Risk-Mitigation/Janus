@@ -10,8 +10,8 @@ Every adapter (LangChain, ADK, …) needs to:
 These two helpers live here so each adapter stays thin.
 """
 
-from pathlib import Path
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from janus.exceptions import PolicyViolation
 from janus.logger import get_logger

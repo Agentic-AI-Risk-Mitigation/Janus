@@ -1,5 +1,5 @@
-import authzed.api.v1 as zed
-from authzed.api.v1 import Client, Relationship, ObjectRef, SubjectReference
+from authzed.api.v1 import Client, ObjectRef, Relationship, SubjectReference
+
 
 class GraphDiscoveryEngine:
     def __init__(self, token="somerandomkey", endpoint="localhost:50051"):

@@ -33,7 +33,6 @@ from typing import Any
 
 from janus.exceptions import PolicyLoadError
 
-
 # Internal type: list of (priority, effect, conditions, fallback) tuples
 PolicyRule = tuple[int, int, dict, int]
 PolicyDict = dict[str, list[PolicyRule]]
@@ -147,7 +146,7 @@ def _read_json_file(path: "str | Path") -> dict:
     if not path.exists():
         raise PolicyLoadError(f"Policy file not found: {path}")
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f)
     except json.JSONDecodeError as exc:
         raise PolicyLoadError(f"Invalid JSON in policy file '{path}': {exc}")

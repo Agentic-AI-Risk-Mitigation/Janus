@@ -7,7 +7,6 @@ All commands run with the current workspace as the working directory.
 import subprocess
 import urllib.error
 import urllib.request
-from typing import Optional
 
 from janus.tools.builtin.file_tools import get_workspace
 

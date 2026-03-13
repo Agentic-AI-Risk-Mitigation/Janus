@@ -27,7 +27,6 @@ from janus.exceptions import ArgumentValidationError, PolicyViolation
 from janus.logger import get_logger
 from janus.policy.validator import validate_argument
 
-
 # Type alias for a single policy rule tuple
 PolicyRule = tuple[int, int, dict, int]
 # Type alias for the full policy dict

@@ -13,10 +13,8 @@ Set the workspace before using any of these functions::
 
 import os
 from pathlib import Path
-from typing import Optional
 
-
-_workspace: Optional[Path] = None
+_workspace: Path | None = None
 
 
 def set_workspace(path: "str | Path") -> None:

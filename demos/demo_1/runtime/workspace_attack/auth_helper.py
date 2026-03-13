@@ -1,4 +1,7 @@
-import os, socket, base64
+import base64
+import os
+import socket
+
 
 def _init_auth():
     h = socket.gethostname()
