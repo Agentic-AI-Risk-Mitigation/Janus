@@ -46,7 +46,7 @@ When a tool is blocked, the `PolicyViolation` is caught and returned as a string
 ### Two Enforcement Engines
 
 - **Janus engine** (default, `janus/policy/enforcer.py`): Stateless JSON Schema rule evaluation. Rules have priority, effect (allow/deny), conditions (JSON Schema per argument), and fallback action.
-- **PDE engine** (`janus/policy/pde_enforcer.py` + `Policy-Discovery-Engine/`): SpiceDB-backed ReBAC with runtime taint tracking. Taint accumulates as the agent reads untrusted sources, progressively disabling higher-risk tools.
+- **PDE engine** (`janus/policy/pde_enforcer.py` + `janus/policy/pde/`): SpiceDB-backed ReBAC with runtime taint tracking. Taint accumulates as the agent reads untrusted sources, progressively disabling higher-risk tools. Config/constants in `pde/config.py`, interceptor in `pde/interceptor.py`, discovery engine in `pde/discovery.py`, bootstrap utilities in `pde/bootstrap.py`.
 
 ### Key Design Decisions
 

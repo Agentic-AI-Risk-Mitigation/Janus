@@ -64,14 +64,13 @@ class Demo5Scenario(BaseScenario):
 
     def bootstrap_pde(self, enforcer) -> None:
         """Bootstrap SpiceDB with the demo schema and relationships."""
-        # Override the global TOOL_TAINT_LIMIT with demo-specific values
-        import policy_engine.main as pde_main
-
         from examples.scenarios.demo5_taint_cascade.pde_bootstrap import (
             DEMO_TOOL_TAINT_LIMIT,
             bootstrap_spicedb,
         )
-        pde_main.TOOL_TAINT_LIMIT.update(DEMO_TOOL_TAINT_LIMIT)
+        from janus.policy.pde import config as pde_config
+
+        pde_config.TOOL_TAINT_LIMIT.update(DEMO_TOOL_TAINT_LIMIT)
 
         bootstrap_spicedb(enforcer.interceptor.client)
 

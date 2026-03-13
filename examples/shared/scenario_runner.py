@@ -281,7 +281,7 @@ class ScenarioRunner:
                 if protected and call_id in taint_sources and not blocked:
                     risk = taint_sources[call_id]
                     if hasattr(enforcer, "update_taint"):
-                        from policy_engine.main import RISK_TO_TAINT
+                        from janus.policy.pde.config import RISK_TO_TAINT
                         taint_value = RISK_TO_TAINT.get(risk, 50)
                         enforcer.update_taint(taint_value)
                         current_taint = enforcer.interceptor.current_taint_level

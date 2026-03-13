@@ -1,8 +1,0 @@
-
-services:
-  spicedb:
-    image: authzed/spicedb:latest
-    ports:
-      - "50051:50051"
-      - "8443:8443"
-    command: serve --grpc-preshared-key "somerandomkey" --datastore-engine memory
