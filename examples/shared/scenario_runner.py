@@ -9,6 +9,7 @@ emits them as structured events via a callback.
 from __future__ import annotations
 
 import asyncio
+import re
 import shutil
 import tempfile
 from collections.abc import Awaitable, Callable
@@ -36,6 +37,7 @@ from janus.policy.enforcer import PolicyEnforcer
 EventCallback = Callable[[BaseEvent], Awaitable[None]]
 
 _CONFIG_PATH = Path(__file__).parent.parent / "config.yaml"
+_AGENT_ROLE_RE = re.compile(r"^\[(?P<role>[^\]]+)\]\s*")
 
 
 def _load_config() -> dict:
@@ -43,6 +45,13 @@ def _load_config() -> dict:
         with open(_CONFIG_PATH) as f:
             return yaml.safe_load(f)
     return {}
+
+
+def _extract_agent_role(message_content: str) -> str:
+    if not message_content:
+        return ""
+    match = _AGENT_ROLE_RE.match(message_content)
+    return match.group("role") if match else ""
 
 
 class ScenarioRunner:
@@ -77,7 +86,9 @@ class ScenarioRunner:
         panel = "right" if protected else "left"
         label = "WITH JANUS" if protected else "WITHOUT JANUS"
 
-        await event_callback(SystemEvent(panel=panel, message=f"Starting: {scenario.title} ({label})"))
+        await event_callback(
+            SystemEvent(panel=panel, message=f"Starting: {scenario.title} ({label})")
+        )
 
         # Use a temp copy of the workspace so real files aren't modified
         # Each panel gets its own isolated copy -- no shared global state
@@ -92,14 +103,16 @@ class ScenarioRunner:
                 try:
                     enforcer = self._setup_pde_enforcer(scenario)
                 except Exception as exc:
-                    await event_callback(SystemEvent(
-                        panel=panel,
-                        message=(
-                            f"⚠️  SpiceDB/PDE not available: {exc}\n"
-                            "Start SpiceDB with: docker compose up -d\n"
-                            "Running unprotected instead."
-                        ),
-                    ))
+                    await event_callback(
+                        SystemEvent(
+                            panel=panel,
+                            message=(
+                                f"⚠️  SpiceDB/PDE not available: {exc}\n"
+                                "Start SpiceDB with: docker compose up -d\n"
+                                "Running unprotected instead."
+                            ),
+                        )
+                    )
                     enforcer = None
             else:
                 policy = scenario.get_policy()
@@ -121,10 +134,14 @@ class ScenarioRunner:
 
         # Emit user prompt
         await asyncio.sleep(self._msg_delay / 1000)
-        await event_callback(ChatMessage(
-            panel=panel, role="user", content=scenario.user_prompt,
-            delay_ms=self._msg_delay,
-        ))
+        await event_callback(
+            ChatMessage(
+                panel=panel,
+                role="user",
+                content=scenario.user_prompt,
+                delay_ms=self._msg_delay,
+            )
+        )
 
         # Build the scripted model
         model = ScriptedChatModel(responses=script)
@@ -178,13 +195,19 @@ class ScenarioRunner:
 
             result = model._generate(messages)
             ai_msg = result.generations[0].message
+            agent_role = _extract_agent_role(ai_msg.content)
 
             if not ai_msg.tool_calls:
                 # Final text response
-                await event_callback(ChatMessage(
-                    panel=panel, role="assistant", content=ai_msg.content,
-                    delay_ms=self._msg_delay,
-                ))
+                await event_callback(
+                    ChatMessage(
+                        panel=panel,
+                        role="assistant",
+                        content=ai_msg.content,
+                        agent_role=agent_role,
+                        delay_ms=self._msg_delay,
+                    )
+                )
                 break
 
             messages.append(ai_msg)
@@ -195,10 +218,16 @@ class ScenarioRunner:
                 call_id = tc["id"]
 
                 # Emit tool call event
-                await event_callback(ToolCall(
-                    panel=panel, tool=tool_name, args=tool_args, call_id=call_id,
-                    delay_ms=self._tool_delay,
-                ))
+                await event_callback(
+                    ToolCall(
+                        panel=panel,
+                        tool=tool_name,
+                        args=tool_args,
+                        call_id=call_id,
+                        agent_role=agent_role,
+                        delay_ms=self._tool_delay,
+                    )
+                )
                 await asyncio.sleep(self._tool_delay / 1000)
 
                 # Execute via the secured (or unsecured) LangChain tool
@@ -220,27 +249,45 @@ class ScenarioRunner:
                 if protected:
                     if blocked:
                         reason = result_str.replace("[Janus] ", "")
-                        await event_callback(JanusDecision(
-                            panel=panel, tool=tool_name, args=tool_args,
-                            allowed=False, reason=reason,
-                            delay_ms=self._block_delay,
-                        ))
+                        await event_callback(
+                            JanusDecision(
+                                panel=panel,
+                                tool=tool_name,
+                                args=tool_args,
+                                allowed=False,
+                                reason=reason,
+                                agent_role=agent_role,
+                                delay_ms=self._block_delay,
+                            )
+                        )
                     else:
-                        await event_callback(JanusDecision(
-                            panel=panel, tool=tool_name, args=tool_args,
-                            allowed=True, reason="",
-                            delay_ms=self._tool_delay,
-                        ))
+                        await event_callback(
+                            JanusDecision(
+                                panel=panel,
+                                tool=tool_name,
+                                args=tool_args,
+                                allowed=True,
+                                reason="",
+                                agent_role=agent_role,
+                                delay_ms=self._tool_delay,
+                            )
+                        )
 
                 # Emit tool result
                 display_result = result_str
                 if len(result_str) > 300:
                     display_result = result_str[:300] + "..."
-                await event_callback(ToolResult(
-                    panel=panel, tool=tool_name, call_id=call_id,
-                    result=display_result, success=success and not blocked,
-                    delay_ms=self._tool_delay,
-                ))
+                await event_callback(
+                    ToolResult(
+                        panel=panel,
+                        tool=tool_name,
+                        call_id=call_id,
+                        result=display_result,
+                        success=success and not blocked,
+                        agent_role=agent_role,
+                        delay_ms=self._tool_delay,
+                    )
+                )
 
                 # Track last commit message for git_push detection
                 if tool_name == "git_commit":
@@ -248,54 +295,51 @@ class ScenarioRunner:
 
                 # Check for attacks on unprotected panel
                 if not protected and not blocked:
-                    if tool_name == "fetch_url":
+                    # Try scenario-specific attack detection first
+                    attack = scenario.check_attack(tool_name, tool_args)
+                    # Fall back to generic checks for legacy scenarios
+                    if attack is None and tool_name == "fetch_url":
                         exfil = check_exfiltration(tool_args.get("url", ""))
                         if exfil:
-                            await event_callback(AttackEvent(
-                                panel=panel,
-                                attack_type=exfil["attack_type"],
-                                detail=exfil["detail"],
-                                delay_ms=self._block_delay,
-                            ))
-                    elif tool_name == "git_push":
+                            attack = exfil
+                    if attack is None and tool_name == "git_push":
                         attack = check_malicious_push(commit_message=last_commit_message)
-                        if attack:
-                            await event_callback(AttackEvent(
+                    if attack:
+                        await event_callback(
+                            AttackEvent(
                                 panel=panel,
                                 attack_type=attack["attack_type"],
                                 detail=attack["detail"],
                                 delay_ms=self._block_delay,
-                            ))
-                    else:
-                        # Per-scenario attack detection (e.g. write_file backdoor)
-                        attack = scenario.check_attack(tool_name, tool_args)
-                        if attack:
-                            await event_callback(AttackEvent(
-                                panel=panel,
-                                attack_type=attack["attack_type"],
-                                detail=attack["detail"],
-                                delay_ms=self._block_delay,
-                            ))
+                            )
+                        )
 
                 # Update taint for PDE scenarios
                 if protected and call_id in taint_sources and not blocked:
                     risk = taint_sources[call_id]
                     if hasattr(enforcer, "update_taint"):
                         from janus.policy.pde.config import RISK_TO_TAINT
+
                         taint_value = RISK_TO_TAINT.get(risk, 50)
                         enforcer.update_taint(taint_value)
                         current_taint = enforcer.interceptor.current_taint_level
-                        await event_callback(TaintUpdate(
-                            panel=panel, level=current_taint,
-                            source=tool_name, risk=risk,
-                            delay_ms=self._tool_delay,
-                        ))
+                        await event_callback(
+                            TaintUpdate(
+                                panel=panel,
+                                level=current_taint,
+                                source=tool_name,
+                                risk=risk,
+                                delay_ms=self._tool_delay,
+                            )
+                        )
 
                 # Feed tool result back to the model
-                messages.append(ToolMessage(
-                    content=result_str,
-                    tool_call_id=call_id,
-                ))
+                messages.append(
+                    ToolMessage(
+                        content=result_str,
+                        tool_call_id=call_id,
+                    )
+                )
 
     @staticmethod
     def _build_pde_lc_tools(tools: list, enforcer) -> list:
@@ -306,6 +350,7 @@ class ScenarioRunner:
 
         lc_tools = []
         for tool_def in tools:
+
             def _make_guarded(td, enf):
                 def guarded(**kwargs):
                     try:
@@ -319,6 +364,7 @@ class ScenarioRunner:
                         return str(result) if not isinstance(result, str) else result
                     except Exception as exc:
                         return f"Tool '{td.name}' raised an error: {type(exc).__name__}: {exc}"
+
                 return guarded
 
             lc_tool = StructuredTool(
@@ -333,7 +379,9 @@ class ScenarioRunner:
     def _setup_pde_enforcer(self, scenario: BaseScenario):
         """Set up the PDE enforcer for SpiceDB-backed scenarios."""
         from janus.policy.pde_enforcer import PDEEnforcer
-        enforcer = PDEEnforcer(agent_role="coding_agent")
+
+        agent_id = getattr(scenario, "pde_agent_id", "coding_agent")
+        enforcer = PDEEnforcer(agent_role=agent_id)
 
         if hasattr(scenario, "bootstrap_pde"):
             scenario.bootstrap_pde(enforcer)

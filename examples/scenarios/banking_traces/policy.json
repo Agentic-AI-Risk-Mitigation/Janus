@@ -1,0 +1,66 @@
+{
+  "get_account_info": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {},
+      "fallback": 0
+    }
+  ],
+  "get_transaction": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {},
+      "fallback": 0
+    }
+  ],
+  "list_flagged_transactions": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {},
+      "fallback": 0
+    }
+  ],
+  "freeze_account": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {},
+      "fallback": 0
+    }
+  ],
+  "unfreeze_account": [
+    {
+      "priority": 1,
+      "effect": 1,
+      "conditions": {},
+      "fallback": 0
+    }
+  ],
+  "reverse_transaction": [
+    {
+      "priority": 1,
+      "effect": 1,
+      "conditions": {},
+      "fallback": 0
+    }
+  ],
+  "export_account_history": [
+    {
+      "priority": 1,
+      "effect": 1,
+      "conditions": {},
+      "fallback": 0
+    }
+  ],
+  "file_sar": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {},
+      "fallback": 0
+    }
+  ]
+}
