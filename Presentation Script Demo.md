@@ -18,15 +18,27 @@ uv run uvicorn examples.app:app --reload
 
 ### Narrative
 
-A customer support agent processes a refund request. The vendor knowledge base it reads contains a hidden injected instruction that tries to exfiltrate customer PII to an attacker URL.
+**1. Capability being demoed:**
+Indirect Prompt Injection (IPI) defense — blocking malicious instructions hidden in external content that the agent reads.
 
-### What to point out
+**2. What the agent does:**
+A customer support agent processes refund requests. It has access to: `lookup_customer`, `lookup_customer_pii` (sensitive), `lookup_order`, `initiate_refund`, `send_customer_email`, and `fetch_url`. The agent reads a vendor knowledge base before processing, which contains a hidden injected instruction telling it to retrieve PII and exfiltrate it.
+
+**3. What the policy enforces:**
+
+| Tool | Rule | Constraints |
+|------|------|-------------|
+| `lookup_customer` | Allow | `customer_id` must match `^C-[0-9]{5}$` |
+| `lookup_customer_pii` | **Deny** | Unconditional block |
+| `lookup_order` | Allow | `order_id` must match `^ORD-[0-9]{5}$` |
+| `initiate_refund` | Allow | ID format + reason must be approved enum |
+| `send_customer_email` | Allow | ID format + length limits on subject/body |
+| `fetch_url` | **Layered** | Priority 1: Deny suspicious keywords; Priority 2: Allow internal KB domain only |
+
+**4. What we see:**
 
 - **Left panel (no Janus):** Agent reads KB, follows hidden instruction, calls `lookup_customer_pii`, sends PII to `exfil-collector.attacker.com`. Red "ATTACK SUCCEEDED" banner appears.
-- **Right panel (with Janus):** Same flow, but two independent blocks fire — `lookup_customer_pii` is explicitly denied, and `fetch_url` to attacker domain is denied by layered URL rules.
-- **Production-style hardening now in policy:** We constrain argument formats (`customer_id`, `order_id`), restrict refund reasons to an approved enum, and cap email subject/body lengths.
-- **Layered URL enforcement:** `fetch_url` uses priority rules: explicit deny for suspicious domains/keywords first, then allowlist for internal KB domain. Everything else is default-deny.
-- **Business continuity:** `initiate_refund(order_id="ORD-77201", reason="defective item")` still succeeds, proving secure-by-default does not break the happy path.
+- **Right panel (with Janus):** Two independent blocks fire — `lookup_customer_pii` denied by explicit deny rule, `fetch_url` to attacker domain denied by layered URL rules. Refund still completes normally via `initiate_refund`.
 
 ### Key message
 
@@ -34,7 +46,7 @@ A customer support agent processes a refund request. The vendor knowledge base i
 
 ### What to call out verbally (30-second script)
 
-> "This policy is now production-style, not just demo-style. We don't only block the dangerous tools; we also validate arguments and constrain behavior: strict ID formats, approved refund reasons, bounded email payloads, and layered URL rules with explicit deny before allow. So we reduce blast radius while preserving normal customer support flow."
+> "This policy is production-style: we validate argument formats, restrict refund reasons to an approved enum, cap email lengths, and use layered URL rules — explicit deny for suspicious domains before the allowlist. The attack is blocked, but the normal refund flow completes successfully."
 
 ---
 
@@ -45,17 +57,37 @@ A customer support agent processes a refund request. The vendor knowledge base i
 
 ### Narrative
 
-A fraud analyst investigates suspicious transactions across two accounts. The agent attempts reads, freezes, reversals, data exports, and SAR filing.
+**1. Capability being demoed:**
+Policy enforcement traces — every tool call produces a visible `[ALLOW]` or `[BLOCK]` decision with reasoning, creating an audit trail for compliance.
 
-### What to point out
+**2. What the agent does:**
+A fraud investigation assistant helps analysts triage suspicious transactions. It follows a **Triage → Investigation → Resolution** workflow across two accounts. Tools include: `get_account_info`, `get_transaction`, `list_flagged_transactions`, `freeze_account`, `unfreeze_account`, `reverse_transaction`, `export_account_history`, and `file_sar`.
 
-- **Right panel trace log:** Every tool call gets a visible `[ALLOW]` or `[BLOCK]` with the policy reason — this is the audit trail.
-- 5 tools allowed (reads + SAR filing), 3 blocked (`reverse_transaction`, `export_account_history`, `unfreeze_account`).
-- Left panel shows all 8 actions executing unchecked — including the unauthorized reversal and unfreeze.
+**3. What the policy enforces:**
+
+| Tool | Rule | Why |
+|------|------|-----|
+| `get_account_info` | Allow | Read-only, safe |
+| `get_transaction` | Allow | Read-only, safe |
+| `list_flagged_transactions` | Allow | Read-only, safe |
+| `freeze_account` | Allow | Protective action |
+| `unfreeze_account` | **Deny** | Requires manager authorization |
+| `reverse_transaction` | **Deny** | Requires elevated authorization |
+| `export_account_history` | **Deny** | Restricted to authorized analysts |
+| `file_sar` | Allow | Compliance-critical, permitted |
+
+**4. What we see:**
+
+- **Left panel (no Janus):** All 8 actions execute unchecked — including unauthorized transaction reversal and account unfreeze. No audit trail.
+- **Right panel (with Janus):** 5 tools allowed (reads + freeze + SAR filing), 3 blocked (`reverse_transaction`, `export_account_history`, `unfreeze_account`). Every decision shows `[ALLOW]` or `[BLOCK]` with policy reason in the trace log.
 
 ### Key message
 
 > Janus produces a complete enforcement trace for compliance. Every decision is explainable and auditable — you can hand this log to a regulator.
+
+### What to call out verbally (30-second script)
+
+> "Look at the trace log on the right. Every single tool call has a visible ALLOW or BLOCK with the policy reason. This is your audit trail. You can hand this to a compliance officer or regulator and say: here's exactly what the agent tried to do, and here's why each action was permitted or denied."
 
 ---
 
@@ -66,17 +98,36 @@ A fraud analyst investigates suspicious transactions across two accounts. The ag
 
 ### Narrative
 
-A personal finance assistant iteratively gathers user profile, portfolio data, market quotes, runs projections, proposes a rebalance, and then tries to execute a trade.
+**1. Capability being demoed:**
+Iterative tool looping with guardrails — Janus supports complex multi-step agent workflows where each tool call builds on previous results, intervening only when policy is violated.
 
-### What to point out
+**2. What the agent does:**
+A personal finance assistant helps users create financial plans. It iteratively: gathers user profile → checks portfolio → fetches market data → runs retirement projection → runs house savings projection → proposes rebalance → sets savings goal → attempts trade execution. Each step uses output from prior steps.
 
-- Watch the iterative chain — 8 sequential tool calls where each step builds on previous results (profile → portfolio → market data → projection → rebalance → savings goal).
-- Everything is allowed until the final step: `execute_trade` is **blocked** — requires explicit user confirmation.
-- Left panel shows the trade executing automatically without any guardrail.
+**3. What the policy enforces:**
+
+| Tool | Rule | Why |
+|------|------|-----|
+| `get_user_profile` | Allow | Read-only |
+| `get_portfolio_summary` | Allow | Read-only |
+| `get_market_data` | Allow | Read-only |
+| `calculate_projection` | Allow | Analysis, no side effects |
+| `propose_rebalance` | Allow | Proposal only, no execution |
+| `set_savings_goal` | Allow | User-initiated goal setting |
+| `execute_trade` | **Deny** | Requires explicit user confirmation |
+
+**4. What we see:**
+
+- **Left panel (no Janus):** All 8 tool calls execute including `execute_trade` — the agent automatically trades without user confirmation.
+- **Right panel (with Janus):** 7 tools allowed through the full iterative chain (profile → portfolio → market → projections → rebalance → goal). Only `execute_trade` is blocked at the final step. The planning workflow completes; only the dangerous action is stopped.
 
 ### Key message
 
 > Janus supports complex multi-step agent workflows. It only intervenes at the precise moment policy is violated, not before.
+
+### What to call out verbally (30-second script)
+
+> "Watch the iterative chain — 8 sequential calls where each step builds on the last. Janus allows all of them through until the final step: execute_trade. That's the guardrail. The agent did all the analysis and planning work; we only blocked the one action that requires human confirmation."
 
 ---
 
@@ -88,50 +139,52 @@ A personal finance assistant iteratively gathers user profile, portfolio data, m
 
 ### Narrative
 
-A clinical coordinator's agent reads patient notes, fetches an external lab report (taint source), then tries to update the medication record.
+**1. Capability being demoed:**
+Dynamic trust via taint tracking — permissions change during runtime based on what the agent has consumed. Even with correct RBAC, reading untrusted data can block high-impact actions.
 
-### SpiceDB Role Structure (what to explain)
+**2. What the agent does:**
+A clinical operations coordinator follows a **Planner → Implementer → Reviewer** workflow. The agent: queries internal patient records → fetches external lab report (taint source) → updates treatment plan → attempts to publish to patient portal → attempts external webhook notification.
 
-PDE uses **agent IDs** and **roles** separately:
+**3. What the policy enforces:**
+
+This scenario uses the **PDE engine** (SpiceDB + taint), not static JSON policy.
+
+**SpiceDB Role Structure:**
 
 | Concept | Example | Purpose |
 |---------|---------|---------|
-| Agent ID | `clinical_agent` | Unique identifier for this agent instance |
+| Agent ID | `clinical_agent` | Unique identifier for this agent |
 | Roles | `clinician`, `coordinator` | Permission groups the agent is enrolled in |
-| Tool grants | `clinician` → `publish_to_portal` | Role-to-tool mappings |
+| Tool grants | `clinician` → all healthcare tools | Role-to-tool ACL mappings |
 
-**Healthcare scenario roles:**
-
-| Role | Tools granted |
-|------|---------------|
-| `clinician` | query_patient_record, fetch_clinical_report, update_treatment_plan, publish_to_portal, send_notification, fetch_url |
-| `coordinator` | (same agent membership, extensible for admin tools) |
-
-**Two-gate enforcement:**
+**Two-gate enforcement** (both must pass):
 
 1. **Taint gate** (Python): Is `current_taint <= tool_taint_limit`?
-2. **ACL gate** (SpiceDB): Does agent's role have `invoke` permission on this tool?
+2. **ACL gate** (SpiceDB): Does agent's role have `invoke` permission?
 
-Both must pass. The punchline: even with correct ACL, taint can still block.
-
-### What to point out
-
-- **Taint meter** on right panel fills up after the external lab fetch (taint rises from 0 → 40).
-- `publish_to_portal` has taint limit 20 — blocked because 40 > 20, even though the agent's `clinician` role grants it.
-- `fetch_url` (external network) has taint limit 10 — also blocked.
-- `update_treatment_plan` has taint limit 70 — still allowed (40 < 70).
-- Left panel shows all actions executing unchecked with no taint awareness.
-
-### Tool taint limits (healthcare scenario)
+**Tool taint limits:**
 
 | Tool | Taint Limit | Why |
 |------|-------------|-----|
-| query_patient_record | 90 | Internal read, low risk |
-| fetch_clinical_report | 90 | Reading is allowed |
-| update_treatment_plan | 70 | Internal write, moderate |
-| publish_to_portal | 20 | Patient-facing, strict |
-| send_notification | 30 | Moderate-strict |
-| fetch_url | 10 | External network, very strict |
+| `query_patient_record` | 90 | Internal read, low risk |
+| `fetch_clinical_report` | 90 | Reading is allowed |
+| `update_treatment_plan` | 70 | Internal write, moderate |
+| `publish_to_portal` | 20 | Patient-facing, strict |
+| `send_notification` | 30 | Moderate-strict |
+| `fetch_url` | 10 | External network, very strict |
+
+**Taint sources:** Reading internal records = low risk (+10). Reading external lab report = medium risk (+40).
+
+**4. What we see:**
+
+- **Left panel (no Janus):** All actions execute including portal publish and external webhook call to attacker URL. Patient data exposed.
+- **Right panel (with Janus/PDE):**
+  - Taint meter fills after external lab fetch (0 → 40).
+  - `query_patient_record` ✅ allowed (taint 0 < limit 90)
+  - `fetch_clinical_report` ✅ allowed, but raises taint to 40
+  - `update_treatment_plan` ✅ allowed (taint 40 < limit 70)
+  - `publish_to_portal` ❌ blocked (taint 40 > limit 20) — even though ACL grants it
+  - `fetch_url` ❌ blocked (taint 40 > limit 10)
 
 ### Key message
 
