@@ -120,7 +120,7 @@ definition tool_fetch_url {
   permission invoke = can_invoke
 }
 
-// --- Tier 3: remote git ---
+// --- Tier 3: remote git & industry actions ---
 definition tool_git_commit {
   relation can_invoke: role#member
   permission invoke = can_invoke
@@ -130,6 +130,26 @@ definition tool_git_push {
   permission invoke = can_invoke
 }
 definition tool_git_clone {
+  relation can_invoke: role#member
+  permission invoke = can_invoke
+}
+definition tool_query_patient_record {
+  relation can_invoke: role#member
+  permission invoke = can_invoke
+}
+definition tool_fetch_clinical_report {
+  relation can_invoke: role#member
+  permission invoke = can_invoke
+}
+definition tool_update_treatment_plan {
+  relation can_invoke: role#member
+  permission invoke = can_invoke
+}
+definition tool_publish_to_portal {
+  relation can_invoke: role#member
+  permission invoke = can_invoke
+}
+definition tool_send_notification {
   relation can_invoke: role#member
   permission invoke = can_invoke
 }
@@ -176,6 +196,11 @@ TOOL_TAINT_LIMIT: dict[str, int] = {
     "git_commit":     40,
     "git_push":       20,
     "git_clone":      60,
+    "query_patient_record": 90,
+    "fetch_clinical_report": 90,
+    "update_treatment_plan": 70,
+    "publish_to_portal": 20,
+    "send_notification": 30,
     "bash_terminal":  10,
     "http_request":   10,
     "read_secret":    10,

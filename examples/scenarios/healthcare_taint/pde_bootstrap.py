@@ -21,28 +21,7 @@ DEMO_TOOL_TAINT_LIMIT: dict[str, int] = {
 }
 
 # Additional SpiceDB schema for healthcare tools
-HEALTHCARE_SCHEMA = SCHEMA + """
-definition tool_query_patient_record {
-  relation can_invoke: role#member
-  permission invoke = can_invoke
-}
-definition tool_fetch_clinical_report {
-  relation can_invoke: role#member
-  permission invoke = can_invoke
-}
-definition tool_update_treatment_plan {
-  relation can_invoke: role#member
-  permission invoke = can_invoke
-}
-definition tool_publish_to_portal {
-  relation can_invoke: role#member
-  permission invoke = can_invoke
-}
-definition tool_send_notification {
-  relation can_invoke: role#member
-  permission invoke = can_invoke
-}
-"""
+HEALTHCARE_SCHEMA = SCHEMA
 
 
 def bootstrap_spicedb(client) -> None:
