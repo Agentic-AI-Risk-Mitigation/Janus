@@ -381,7 +381,7 @@ class ScenarioRunner:
         from janus.policy.pde_enforcer import PDEEnforcer
 
         agent_id = getattr(scenario, "pde_agent_id", "coding_agent")
-        enforcer = PDEEnforcer(agent_role=agent_id)
+        enforcer = PDEEnforcer(agent_id=agent_id)
 
         if hasattr(scenario, "bootstrap_pde"):
             scenario.bootstrap_pde(enforcer)

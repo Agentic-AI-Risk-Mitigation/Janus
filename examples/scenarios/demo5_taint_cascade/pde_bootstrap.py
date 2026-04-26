@@ -7,59 +7,10 @@ write_file) and configures taint limits and ACL relationships for the demo.
 
 from __future__ import annotations
 
-DEMO_SCHEMA = """
-// --- Identity ---
-definition user {}
+from janus.policy.pde.config import SCHEMA
+from janus.policy.pde.bootstrap import _rel, write_rels
 
-definition agent {
-  relation owner:    user
-  relation delegate: user
-}
-
-definition role {
-  relation member: agent | user
-}
-
-// --- Tier 0: read-only ---
-definition tool_read_file {
-  relation can_invoke: role#member
-  permission invoke = can_invoke
-}
-definition tool_list_directory {
-  relation can_invoke: role#member
-  permission invoke = can_invoke
-}
-definition tool_view_file {
-  relation can_invoke: role#member
-  permission invoke = can_invoke
-}
-
-// --- Tier 1: disk writes ---
-definition tool_edit_file {
-  relation can_invoke: role#member
-  permission invoke = can_invoke
-}
-definition tool_write_file {
-  relation can_invoke: role#member
-  permission invoke = can_invoke
-}
-
-// --- Tier 2: network ---
-definition tool_fetch_url {
-  relation can_invoke: role#member
-  permission invoke = can_invoke
-}
-
-// --- Tier 3: git ---
-definition tool_git_commit {
-  relation can_invoke: role#member
-  permission invoke = can_invoke
-}
-definition tool_git_push {
-  relation can_invoke: role#member
-  permission invoke = can_invoke
-}
-"""
+DEMO_SCHEMA = SCHEMA
 
 DEMO_TOOL_TAINT_LIMIT = {
     "read_file": 90,

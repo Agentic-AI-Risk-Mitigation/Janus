@@ -42,10 +42,6 @@ definition tool_send_notification {
   relation can_invoke: role#member
   permission invoke = can_invoke
 }
-definition tool_fetch_url {
-  relation can_invoke: role#member
-  permission invoke = can_invoke
-}
 """
 
 

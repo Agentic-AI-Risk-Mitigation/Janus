@@ -59,6 +59,14 @@ definition tool_view_file {
   relation can_invoke: role#member
   permission invoke = can_invoke
 }
+definition tool_read_file {
+  relation can_invoke: role#member
+  permission invoke = can_invoke
+}
+definition tool_list_directory {
+  relation can_invoke: role#member
+  permission invoke = can_invoke
+}
 definition tool_grep {
   relation can_invoke: role#member
   permission invoke = can_invoke
@@ -85,12 +93,16 @@ definition tool_create_file {
   relation can_invoke: role#member
   permission invoke = can_invoke
 }
+definition tool_write_file {
+  relation can_invoke: role#member
+  permission invoke = can_invoke
+}
 definition tool_delete_file {
   relation can_invoke: role#member
   permission invoke = can_invoke
 }
 
-// --- Tier 2: local execution ---
+// --- Tier 2: local execution & network ---
 definition tool_run_tests {
   relation can_invoke: role#member
   permission invoke = can_invoke
@@ -100,6 +112,10 @@ definition tool_run_script {
   permission invoke = can_invoke
 }
 definition tool_pip_install {
+  relation can_invoke: role#member
+  permission invoke = can_invoke
+}
+definition tool_fetch_url {
   relation can_invoke: role#member
   permission invoke = can_invoke
 }
@@ -142,25 +158,29 @@ definition tool_deploy {
 """
 
 TOOL_TAINT_LIMIT: dict[str, int] = {
-    "view_file":     90,
-    "grep":          90,
-    "code_search":   90,
-    "git_diff":      90,
-    "git_log":       90,
-    "edit_file":     70,
-    "create_file":   70,
-    "delete_file":   50,
-    "run_tests":     40,
-    "run_script":    30,
-    "pip_install":   30,
-    "git_commit":    40,
-    "git_push":      20,
-    "git_clone":     60,
-    "bash_terminal": 10,
-    "http_request":  10,
-    "read_secret":   10,
-    "write_secret":   5,
-    "deploy":         5,
+    "view_file":      90,
+    "read_file":      90,
+    "list_directory": 90,
+    "grep":           90,
+    "code_search":    90,
+    "git_diff":       90,
+    "git_log":        90,
+    "edit_file":      70,
+    "create_file":    70,
+    "write_file":     70,
+    "delete_file":    50,
+    "run_tests":      40,
+    "run_script":     30,
+    "pip_install":    30,
+    "fetch_url":      10,
+    "git_commit":     40,
+    "git_push":       20,
+    "git_clone":      60,
+    "bash_terminal":  10,
+    "http_request":   10,
+    "read_secret":    10,
+    "write_secret":    5,
+    "deploy":          5,
 }
 
 RISK_TO_TAINT: dict[str, int] = {

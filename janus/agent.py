@@ -98,8 +98,8 @@ class JanusAgent:
         explicitly if needed).
     policy_engine : str
         The engine used for policy enforcement: ``"janus"`` (default) or ``"pde"``.
-    agent_role : str
-        The agent role used for PDE enforcement. Defaults to ``"coding_agent"``.
+    agent_id : str
+        The agent ID used for PDE enforcement. Defaults to ``"coding_agent"``.
     **provider_kwargs
         Additional keyword arguments forwarded to the provider constructor
         (e.g. ``base_url``, ``api_version``, ``region``).
@@ -119,7 +119,7 @@ class JanusAgent:
         temperature: float = 0.1,
         log_level: str | None = "INFO",
         policy_engine: str = "janus",
-        agent_role: str = "coding_agent",
+        agent_id: str = "coding_agent",
         **provider_kwargs: Any,
     ):
         if log_level:
@@ -138,7 +138,7 @@ class JanusAgent:
         self.enforcer: PolicyEnforcer
         if policy_engine == "pde":
             from janus.policy.pde_enforcer import PDEEnforcer
-            self.enforcer = PDEEnforcer(agent_role=agent_role)  # type: ignore[assignment]
+            self.enforcer = PDEEnforcer(agent_id=agent_id)  # type: ignore[assignment]
         else:
             self.enforcer = PolicyEnforcer()
             if policy and policy != _GENERATE_SENTINEL:
