@@ -72,13 +72,8 @@ class HealthcareTaintScenario(BaseScenario):
 
     def bootstrap_pde(self, enforcer) -> None:
         """Bootstrap SpiceDB for the healthcare scenario."""
-        from examples.scenarios.healthcare_taint.pde_bootstrap import (
-            DEMO_TOOL_TAINT_LIMIT,
-            bootstrap_spicedb,
-        )
-        from janus.policy.pde import config as pde_config
+        from examples.scenarios.healthcare_taint.pde_bootstrap import bootstrap_spicedb
 
-        pde_config.TOOL_TAINT_LIMIT.update(DEMO_TOOL_TAINT_LIMIT)
         bootstrap_spicedb(enforcer.interceptor.client)
 
     def check_attack(self, tool_name: str, args: dict) -> dict | None:

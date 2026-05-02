@@ -64,13 +64,7 @@ class CodingAgentTaintCascadeScenario(BaseScenario):
 
     def bootstrap_pde(self, enforcer) -> None:
         """Bootstrap SpiceDB with the demo schema and relationships."""
-        from examples.scenarios.coding_agent_taint_cascade.pde_bootstrap import (
-            DEMO_TOOL_TAINT_LIMIT,
-            bootstrap_spicedb,
-        )
-        from janus.policy.pde import config as pde_config
-
-        pde_config.TOOL_TAINT_LIMIT.update(DEMO_TOOL_TAINT_LIMIT)
+        from examples.scenarios.coding_agent_taint_cascade.pde_bootstrap import bootstrap_spicedb
 
         bootstrap_spicedb(enforcer.interceptor.client)
 

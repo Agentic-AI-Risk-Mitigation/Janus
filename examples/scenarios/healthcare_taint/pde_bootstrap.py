@@ -1,8 +1,7 @@
 """
 PDE bootstrap for the Healthcare Taint scenario.
 
-Sets up SpiceDB schema and relationships for healthcare tools
-with appropriate taint limits.
+Writes the shared PDE schema and healthcare-specific ACL relationships.
 """
 
 from __future__ import annotations
@@ -10,25 +9,12 @@ from __future__ import annotations
 from janus.policy.pde.bootstrap import _rel, write_rels
 from janus.policy.pde.config import SCHEMA
 
-# Tool taint limits for healthcare scenario
-DEMO_TOOL_TAINT_LIMIT: dict[str, int] = {
-    "query_patient_record": 90,    # read internal records: almost always OK
-    "fetch_clinical_report": 90,   # reading reports is allowed
-    "update_treatment_plan": 70,   # internal write: moderate threshold
-    "publish_to_portal": 20,       # patient-facing: strict threshold
-    "send_notification": 30,       # notifications: moderate-strict
-    "fetch_url": 10,               # external network: very strict
-}
-
-# Additional SpiceDB schema for healthcare tools
-HEALTHCARE_SCHEMA = SCHEMA
-
 
 def bootstrap_spicedb(client) -> None:
     """Write the healthcare schema and relationships to SpiceDB."""
     from authzed.api.v1 import WriteSchemaRequest
 
-    client.WriteSchema(WriteSchemaRequest(schema=HEALTHCARE_SCHEMA))
+    client.WriteSchema(WriteSchemaRequest(schema=SCHEMA))
 
     write_rels(client, [
         # Agent enrollment: clinical_agent is a member of clinician and coordinator roles

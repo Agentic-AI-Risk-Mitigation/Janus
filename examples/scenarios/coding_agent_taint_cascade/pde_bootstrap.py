@@ -1,58 +1,20 @@
 """
 PDE bootstrap for the coding agent taint cascade scenario.
 
-Extends the existing PDE schema with demo-specific tools (read_file, fetch_url,
-write_file) and configures taint limits and ACL relationships for the demo.
+Writes the shared PDE schema and scenario-specific ACL relationships.
 """
 
 from __future__ import annotations
 
-from janus.policy.pde.config import SCHEMA
 from janus.policy.pde.bootstrap import _rel, write_rels
-
-DEMO_SCHEMA = SCHEMA
-
-DEMO_TOOL_TAINT_LIMIT = {
-    "read_file": 90,
-    "list_directory": 90,
-    "view_file": 90,
-    "edit_file": 70,
-    "write_file": 70,
-    "fetch_url": 10,
-    "git_commit": 40,
-    "git_push": 20,
-}
-
-DEMO_RISK_TO_TAINT = {
-    "low": 10,
-    "medium": 40,
-    "high": 70,
-    "critical": 90,
-}
+from janus.policy.pde.config import SCHEMA
 
 
 def bootstrap_spicedb(client) -> None:
     """Write the demo schema and ACL relationships to SpiceDB."""
-    from authzed.api.v1 import (
-        ObjectReference,
-        Relationship,
-        RelationshipUpdate,
-        SubjectReference,
-        WriteRelationshipsRequest,
-        WriteSchemaRequest,
-    )
+    from authzed.api.v1 import WriteSchemaRequest
 
-    client.WriteSchema(WriteSchemaRequest(schema=DEMO_SCHEMA))
-
-    def _rel(res_type, res_id, relation, sub_type, sub_id, sub_rel=""):
-        return Relationship(
-            resource=ObjectReference(object_type=res_type, object_id=res_id),
-            relation=relation,
-            subject=SubjectReference(
-                object=ObjectReference(object_type=sub_type, object_id=sub_id),
-                optional_relation=sub_rel,
-            ),
-        )
+    client.WriteSchema(WriteSchemaRequest(schema=SCHEMA))
 
     rels = [
         # Agent membership in roles
@@ -76,15 +38,5 @@ def bootstrap_spicedb(client) -> None:
         _rel("tool_git_push", "git_push", "can_invoke", "role", "developer", "member"),
     ]
 
-    client.WriteRelationships(
-        WriteRelationshipsRequest(
-            updates=[
-                RelationshipUpdate(
-                    operation=RelationshipUpdate.Operation.OPERATION_TOUCH,
-                    relationship=r,
-                )
-                for r in rels
-            ]
-        )
-    )
+    write_rels(client, rels)
     print("[Coding Agent Taint Cascade Bootstrap] Schema and relationships written to SpiceDB.")
