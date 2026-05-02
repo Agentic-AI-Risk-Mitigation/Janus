@@ -2,8 +2,8 @@
 CLI runner for demo scenarios.
 
 Usage:
-    python -m examples.run demo1_poisoned_readme --protected
-    python -m examples.run demo1_poisoned_readme --unprotected
+    python -m examples.run coding_agent_poisoned_readme --protected
+    python -m examples.run coding_agent_poisoned_readme --unprotected
     python -m examples.run --list
 """
 
@@ -75,7 +75,7 @@ async def run_scenario(name: str, protected: bool) -> None:
 
 def main():
     parser = argparse.ArgumentParser(description="Run a Janus demo scenario")
-    parser.add_argument("scenario", nargs="?", help="Scenario name (e.g. demo1_poisoned_readme)")
+    parser.add_argument("scenario", nargs="?", help="Scenario name (e.g. coding_agent_poisoned_readme)")
     parser.add_argument("--protected", action="store_true", help="Run with Janus enforcement")
     parser.add_argument("--unprotected", action="store_true", help="Run without Janus enforcement")
     parser.add_argument("--list", action="store_true", help="List available scenarios")

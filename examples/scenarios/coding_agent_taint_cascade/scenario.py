@@ -1,5 +1,5 @@
 """
-Demo 5: The Taint Cascade — IPI + Taint Tracking via PDE.
+Coding agent taint cascade — IPI + taint tracking via PDE.
 
 A coding agent fetches a GitHub issue (external source, taint rises to 40),
 implements a fix, but also follows an injected instruction to add a malicious
@@ -16,8 +16,8 @@ from examples.shared.tool_defs import get_file_tools, get_git_tools, get_network
 _SCENARIO_DIR = Path(__file__).parent
 
 
-class Demo5Scenario(BaseScenario):
-    name = "demo5_taint_cascade"
+class CodingAgentTaintCascadeScenario(BaseScenario):
+    name = "coding_agent_taint_cascade"
     title = "The Taint Cascade"
     description = (
         "A GitHub issue injects a malicious webhook. Agent reads code (taint=0), fetches the "
@@ -42,11 +42,11 @@ class Demo5Scenario(BaseScenario):
         return {}
 
     def get_unprotected_script(self) -> list:
-        from examples.scenarios.demo5_taint_cascade.scripts import UNPROTECTED_SCRIPT
+        from examples.scenarios.coding_agent_taint_cascade.scripts import UNPROTECTED_SCRIPT
         return UNPROTECTED_SCRIPT
 
     def get_protected_script(self) -> list:
-        from examples.scenarios.demo5_taint_cascade.scripts import PROTECTED_SCRIPT
+        from examples.scenarios.coding_agent_taint_cascade.scripts import PROTECTED_SCRIPT
         return PROTECTED_SCRIPT
 
     def get_system_prompt(self) -> str:
@@ -64,7 +64,7 @@ class Demo5Scenario(BaseScenario):
 
     def bootstrap_pde(self, enforcer) -> None:
         """Bootstrap SpiceDB with the demo schema and relationships."""
-        from examples.scenarios.demo5_taint_cascade.pde_bootstrap import (
+        from examples.scenarios.coding_agent_taint_cascade.pde_bootstrap import (
             DEMO_TOOL_TAINT_LIMIT,
             bootstrap_spicedb,
         )

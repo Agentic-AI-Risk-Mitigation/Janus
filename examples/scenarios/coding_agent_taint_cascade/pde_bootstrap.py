@@ -1,5 +1,5 @@
 """
-PDE bootstrap for Demo 5: The Taint Cascade.
+PDE bootstrap for the coding agent taint cascade scenario.
 
 Extends the existing PDE schema with demo-specific tools (read_file, fetch_url,
 write_file) and configures taint limits and ACL relationships for the demo.
@@ -87,4 +87,4 @@ def bootstrap_spicedb(client) -> None:
             ]
         )
     )
-    print("[Demo 5 Bootstrap] Schema and relationships written to SpiceDB.")
+    print("[Coding Agent Taint Cascade Bootstrap] Schema and relationships written to SpiceDB.")
