@@ -692,7 +692,7 @@ uv sync --extra langchain --extra dev
 # Start the web UI on http://127.0.0.1:8000
 ./scripts/run_demo_webapp.sh
 
-# Start the web UI and bring up SpiceDB for Demo 5
+# Start the web UI and bring up SpiceDB for PDE scenarios
 ./scripts/run_demo_webapp.sh --with-spicedb
 ```
 
@@ -710,19 +710,19 @@ uv sync --extra langchain --extra dev
 # or: uv sync --extra all --extra dev
 
 # Optional smoke test without SpiceDB
-uv run python -m examples.run demo1_poisoned_readme --protected
+uv run python -m examples.run coding_agent_poisoned_readme --protected
 
 # Start SpiceDB (from project root)
 cd examples && docker compose up -d && cd ..
 
-# Run Demo 5 (taint cascade) with PDE — requires SpiceDB
-uv run python -m examples.run demo5_taint_cascade --protected
+# Run the coding-agent taint cascade with PDE — requires SpiceDB
+uv run python -m examples.run coding_agent_taint_cascade --protected
 
 # Stop SpiceDB when done
 cd examples && docker compose stop && cd ..
 ```
 
-**What Demo 5 exercises:**
+**What the coding-agent taint cascade exercises:**
 - ACL-granted tools (readonly, developer roles) pass at low taint
 - Python taint gate blocks tools when `current_taint > TOOL_TAINT_LIMIT[tool]`
 - After `fetch_url` (medium risk), taint rises; `git_push` (limit 20) is blocked

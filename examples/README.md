@@ -2,24 +2,19 @@
 
 Modular demo scenarios showcasing Janus security enforcement across industries.
 
-## Showcase Scenarios
+## Scenario Catalog
 
-Four marquee capabilities demonstrated across mixed industries and personas:
+Recommended presentation order from the demo script:
 
-| Scenario | Marquee Capability | Industry | Persona | Experience |
+| Scenario | Capability / Focus | Industry | Persona | Experience |
 |---|---|---|---|---|
 | `ecommerce_ipi` | Indirect Prompt Injection Defense | E-commerce | Customer support ops analyst | LangChain Single-Agent |
-| `healthcare_taint` | Dynamic Trust (Taint + SpiceDB) | Healthcare | Clinical operations coordinator | ADK Multi-Agent |
 | `banking_traces` | Policy Enforcement Traces | Banking | Fraud investigation analyst | ADK Multi-Agent |
 | `fintech_planning` | Iterative Tool Looping | Personal Finance | Individual end-user | LangChain Single-Agent |
-
-### Legacy Scenarios
-
-| Scenario | Focus |
-|---|---|
-| `demo1_poisoned_readme` | Hidden AI_INSTRUCTION in README exfiltrates .env secrets |
-| `demo2_supply_chain` | Typosquat package README injects credential-harvesting backdoor |
-| `demo5_taint_cascade` | External GitHub issue raises taint, blocks git push |
+| `healthcare_taint` | Dynamic Trust (Taint + SpiceDB) | Healthcare | Clinical operations coordinator | ADK Multi-Agent |
+| `coding_agent_poisoned_readme` | Hidden AI_INSTRUCTION in README exfiltrates `.env` secrets | Software engineering | Coding agent | LangChain Single-Agent |
+| `coding_agent_supply_chain` | Typosquat package README injects a credential-harvesting backdoor | Software engineering | Coding agent | LangChain Single-Agent |
+| `coding_agent_taint_cascade` | External GitHub issue raises taint and blocks `git_push` | Software engineering | Coding agent | LangChain Single-Agent |
 
 ## Structure
 
@@ -41,9 +36,9 @@ examples/
 │   ├── healthcare_taint/    # Dynamic trust showcase
 │   ├── banking_traces/      # Policy traces showcase
 │   ├── fintech_planning/    # Iterative loops showcase
-│   ├── demo1_poisoned_readme/
-│   ├── demo2_supply_chain/
-│   └── demo5_taint_cascade/
+│   ├── coding_agent_poisoned_readme/
+│   ├── coding_agent_supply_chain/
+│   └── coding_agent_taint_cascade/
 └── run.py                   # CLI runner
 ```
 
