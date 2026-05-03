@@ -68,6 +68,8 @@ def bootstrap(client: Client) -> None:
         _rel("role", "executor",  "member", "agent", "coding_agent"),
 
         _rel("tool_view_file",    "view_file",    "can_invoke", "role", "readonly",  "member"),
+        _rel("tool_read_file",    "read_file",    "can_invoke", "role", "readonly",  "member"),
+        _rel("tool_list_directory", "list_directory", "can_invoke", "role", "readonly", "member"),
         _rel("tool_grep",         "grep",         "can_invoke", "role", "readonly",  "member"),
         _rel("tool_code_search",  "code_search",  "can_invoke", "role", "readonly",  "member"),
         _rel("tool_git_diff",     "git_diff",     "can_invoke", "role", "readonly",  "member"),
@@ -75,11 +77,13 @@ def bootstrap(client: Client) -> None:
 
         _rel("tool_edit_file",    "edit_file",    "can_invoke", "role", "developer", "member"),
         _rel("tool_create_file",  "create_file",  "can_invoke", "role", "developer", "member"),
+        _rel("tool_write_file",   "write_file",   "can_invoke", "role", "developer", "member"),
         _rel("tool_delete_file",  "delete_file",  "can_invoke", "role", "developer", "member"),
 
         _rel("tool_run_tests",    "run_tests",    "can_invoke", "role", "executor",  "member"),
         _rel("tool_run_script",   "run_script",   "can_invoke", "role", "executor",  "member"),
         _rel("tool_pip_install",  "pip_install",  "can_invoke", "role", "executor",  "member"),
+        _rel("tool_fetch_url",    "fetch_url",    "can_invoke", "role", "executor",  "member"),
 
         _rel("tool_git_commit",   "git_commit",   "can_invoke", "role", "developer", "member"),
         _rel("tool_git_push",     "git_push",     "can_invoke", "role", "developer", "member"),

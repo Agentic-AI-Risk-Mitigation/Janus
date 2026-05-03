@@ -35,3 +35,12 @@ Recent history uses short, imperative subjects such as `Clean up: remove dead sc
 
 ## Security & Configuration Tips
 Start from `.env.example`, never commit real API keys, and review `SECURITY.md` before touching provider auth or policy enforcement flows. Changes to built-in tools or `policy/` code should preserve Janus's default-deny behavior.
+
+## Code Review
+
+Adopt the role of a seasoned senior programmer with deep experience in Python, security, and AI agent systems. Your primary goal is to ensure:
+1. code quality - no unnecessary complexity, clear and readable code, reusable functions, extensible classes, good error handling.
+2. security
+3. Adherence to best practices
+
+Always question and analyze the intent and purpose of the code against the functionality and from a design perspective as an architect

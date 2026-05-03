@@ -201,7 +201,14 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
+# Codex
+.codexignore
+
 # Marimo
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+# User-Agent Interaction notes
+*.notes

@@ -133,7 +133,7 @@ print(response)
 | `policy` | `str \| Path \| dict \| None` | `None` | Policy source (file path, dict, `"generate"`, or `None`) |
 | `policy_model` | `str \| None` | `"gpt-4o-2024-08-06"` | Model used for LLM-based policy generation |
 | `policy_engine`| `str` | `"janus"` | Enforcer engine to use (`"janus"` or `"pde"`) |
-| `agent_role`   | `str` | `"coding_agent"` | The role assessed during `pde` taint tracking |
+| `agent_id`   | `str` | `"coding_agent"` | Agent identity used for `pde` taint and ACL checks |
 | `api_key` | `str \| None` | `None` | API key (falls back to provider's env var) |
 | `workspace` | `str \| Path \| None` | `cwd` | Root directory for file-system tools |
 | `max_tool_iterations` | `int` | `10` | Max tool-call cycles per `run()` call |

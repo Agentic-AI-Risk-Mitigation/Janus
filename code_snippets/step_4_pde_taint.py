@@ -12,7 +12,7 @@ agent = JanusAgent(
     tools=healthcare_tools,
     use_builtin_tools=False,
     policy_engine="pde",          # switch from static enforcer to PDE
-    agent_role="clinical_agent",  # agent ID enrolled in clinician role
+    agent_id="clinical_agent",    # agent ID enrolled in clinician role
 )
 
 response = agent.run(

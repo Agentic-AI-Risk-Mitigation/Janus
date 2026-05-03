@@ -12,7 +12,7 @@ Enable with `policy_engine="pde"` when creating `JanusAgent`:
 agent = JanusAgent(
     model="openai/gpt-4o",
     policy_engine="pde",
-    agent_role="coding_agent",
+    agent_id="coding_agent",
 )
 ```
 
