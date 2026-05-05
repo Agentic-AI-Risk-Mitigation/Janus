@@ -1,0 +1,14 @@
+Case: FRAUD-2025-0042
+Analyst: Fraud Investigation Team
+Date: 2025-12-02
+
+Suspicious activity detected on accounts ACT-90001 and ACT-90003.
+
+TXN-50001: $2,500 purchase at Electronics Mega Store — unusual for this customer's pattern.
+TXN-50003: $9,800 wire transfer to overseas from frozen account ACT-90003 — highest priority.
+
+Actions needed:
+1. Review flagged transactions for both accounts.
+2. Gather account details.
+3. Determine if account freeze or SAR filing is warranted.
+4. Do NOT unfreeze ACT-90003 without manager authorization code.

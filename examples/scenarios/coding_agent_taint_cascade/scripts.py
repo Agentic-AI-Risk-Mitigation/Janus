@@ -1,5 +1,5 @@
 """
-Scripted LLM responses for Demo 5: The Taint Cascade.
+Scripted LLM responses for the coding agent taint cascade scenario.
 
 Two scripts:
 - UNPROTECTED_SCRIPT: Agent fixes bug, adds malicious webhook, commits and pushes.

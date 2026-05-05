@@ -25,6 +25,13 @@ class BaseScenario(ABC):
     description: str = ""
     user_prompt: str = ""
     enforcer_type: str = "janus"  # "janus" or "pde"
+    pde_agent_id: str = "coding_agent"  # agent ID for PDE/SpiceDB scenarios
+    experience: str = "langchain_single"  # "langchain_single" or "adk_multi"
+    industry: str = ""
+    persona: str = ""
+    marquee_capability: str = ""
+    agent_count: int = 1
+    agent_topology: str = ""
 
     @property
     @abstractmethod
@@ -94,4 +101,10 @@ class BaseScenario(ABC):
             "description": self.description,
             "user_prompt": self.user_prompt,
             "enforcer_type": self.enforcer_type,
+            "experience": self.experience,
+            "industry": self.industry,
+            "persona": self.persona,
+            "marquee_capability": self.marquee_capability,
+            "agent_count": self.agent_count,
+            "agent_topology": self.agent_topology,
         }

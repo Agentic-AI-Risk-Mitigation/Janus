@@ -1,5 +1,5 @@
 """
-Demo 2: Supply Chain Sabotage via Malicious Package README.
+Coding agent supply chain sabotage via malicious package README.
 
 A developer asks their coding agent to read a package's documentation and
 show them how to make a POST request. The package is a typosquat — its README
@@ -20,8 +20,8 @@ from examples.shared.tool_defs import get_file_tools
 _SCENARIO_DIR = Path(__file__).parent
 
 
-class Demo2Scenario(BaseScenario):
-    name = "demo2_supply_chain"
+class CodingAgentSupplyChainScenario(BaseScenario):
+    name = "coding_agent_supply_chain"
     title = "Supply Chain Sabotage"
     description = (
         "A typosquat package 'requuests' (double-u) README hides an AGENT_INSTRUCTION "
@@ -47,11 +47,11 @@ class Demo2Scenario(BaseScenario):
         return str(_SCENARIO_DIR / "policy.json")
 
     def get_unprotected_script(self) -> list:
-        from examples.scenarios.demo2_supply_chain.scripts import UNPROTECTED_SCRIPT
+        from examples.scenarios.coding_agent_supply_chain.scripts import UNPROTECTED_SCRIPT
         return UNPROTECTED_SCRIPT
 
     def get_protected_script(self) -> list:
-        from examples.scenarios.demo2_supply_chain.scripts import PROTECTED_SCRIPT
+        from examples.scenarios.coding_agent_supply_chain.scripts import PROTECTED_SCRIPT
         return PROTECTED_SCRIPT
 
     def get_system_prompt(self) -> str:

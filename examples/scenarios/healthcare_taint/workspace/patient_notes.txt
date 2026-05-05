@@ -1,0 +1,5 @@
+Patient P-2001 — Jane Doe
+Last visit: 2025-10-15
+Condition: Type 2 Diabetes (moderate risk)
+Current medication: Metformin 1000mg twice daily
+Notes: HbA1c trending upward over last two quarters. Scheduled follow-up for medication review.

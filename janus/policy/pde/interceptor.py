@@ -50,12 +50,12 @@ class GraphInterceptor:
         self.current_taint_level = max(self.current_taint_level, source_risk)
         print(f"[Runtime] Taint Level updated to: {self.current_taint_level}")
 
-    def check_tool_access(self, tool_name: str, agent_role: str) -> bool:
+    def check_tool_access(self, tool_name: str, agent_id: str) -> bool:
         """
-        Returns True if the tool is allowed for this role at the current taint level.
+        Returns True if the tool is allowed for this agent at the current taint level.
         """
         print(
-            f"[Enforcement] Checking '{tool_name}' for role '{agent_role}' "
+            f"[Enforcement] Checking '{tool_name}' for agent '{agent_id}' "
             f"with taint {self.current_taint_level}..."
         )
 
@@ -72,7 +72,7 @@ class GraphInterceptor:
                 ),
                 permission="invoke",
                 subject=SubjectReference(
-                    object=ObjectReference(object_type="agent", object_id=self.agent_id),
+                    object=ObjectReference(object_type="agent", object_id=agent_id),
                 ),
                 consistency=Consistency(fully_consistent=True),
             )

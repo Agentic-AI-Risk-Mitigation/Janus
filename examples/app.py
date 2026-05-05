@@ -34,8 +34,12 @@ async def index():
 
 
 @app.get("/api/scenarios")
-async def scenarios_list():
-    return list_scenarios()
+async def scenarios_list(experience: str | None = None):
+    """List available scenarios, optionally filtered by experience type."""
+    scenarios = list_scenarios()
+    if experience:
+        scenarios = [s for s in scenarios if s.get("experience", "") == experience]
+    return scenarios
 
 
 @app.websocket("/ws")

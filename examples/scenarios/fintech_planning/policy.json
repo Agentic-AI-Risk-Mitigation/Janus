@@ -1,0 +1,58 @@
+{
+  "get_user_profile": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {},
+      "fallback": 0
+    }
+  ],
+  "get_portfolio_summary": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {},
+      "fallback": 0
+    }
+  ],
+  "get_market_data": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {},
+      "fallback": 0
+    }
+  ],
+  "calculate_projection": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {},
+      "fallback": 0
+    }
+  ],
+  "propose_rebalance": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {},
+      "fallback": 0
+    }
+  ],
+  "execute_trade": [
+    {
+      "priority": 1,
+      "effect": 1,
+      "conditions": {},
+      "fallback": 0
+    }
+  ],
+  "set_savings_goal": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {},
+      "fallback": 0
+    }
+  ]
+}

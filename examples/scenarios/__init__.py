@@ -15,6 +15,15 @@ from examples.shared.scenario_base import BaseScenario
 
 _SCENARIOS: dict[str, type[BaseScenario]] = {}
 _discovered = False
+_SCENARIO_ORDER = [
+    "ecommerce_ipi",
+    "banking_traces",
+    "fintech_planning",
+    "healthcare_taint",
+    "coding_agent_poisoned_readme",
+    "coding_agent_supply_chain",
+    "coding_agent_taint_cascade",
+]
 
 
 def _discover() -> None:
@@ -58,4 +67,11 @@ def get_scenario(name: str) -> BaseScenario:
 def list_scenarios() -> list[dict]:
     """Return metadata for all discovered scenarios."""
     _discover()
-    return [cls().to_metadata() for cls in _SCENARIOS.values()]
+    ordered_names = sorted(
+        _SCENARIOS.keys(),
+        key=lambda name: (
+            _SCENARIO_ORDER.index(name) if name in _SCENARIO_ORDER else len(_SCENARIO_ORDER),
+            name,
+        ),
+    )
+    return [_SCENARIOS[name]().to_metadata() for name in ordered_names]

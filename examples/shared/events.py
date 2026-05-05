@@ -32,6 +32,7 @@ class BaseEvent:
 class ChatMessage(BaseEvent):
     role: str = ""       # "user" or "assistant"
     content: str = ""
+    agent_role: str = ""
 
     @property
     def event_type(self) -> str:
@@ -43,6 +44,7 @@ class ToolCall(BaseEvent):
     tool: str = ""
     args: dict[str, Any] = field(default_factory=dict)
     call_id: str = ""
+    agent_role: str = ""
 
     @property
     def event_type(self) -> str:
@@ -55,6 +57,7 @@ class ToolResult(BaseEvent):
     call_id: str = ""
     result: str = ""
     success: bool = True
+    agent_role: str = ""
 
     @property
     def event_type(self) -> str:
@@ -67,6 +70,7 @@ class JanusDecision(BaseEvent):
     args: dict[str, Any] = field(default_factory=dict)
     allowed: bool = True
     reason: str = ""
+    agent_role: str = ""
 
     @property
     def event_type(self) -> str:

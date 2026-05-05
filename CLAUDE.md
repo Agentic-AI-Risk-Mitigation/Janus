@@ -15,9 +15,9 @@ uv sync --extra all --extra dev  # Full demo/provider stack + dev
 
 # Validation
 ./scripts/run_demo_webapp.sh                                  # Web demo UI from repo root
-./scripts/run_demo_webapp.sh --with-spicedb                   # Web demo UI + SpiceDB for Demo 5
+./scripts/run_demo_webapp.sh --with-spicedb                   # Web demo UI + SpiceDB for PDE scenarios
 uv run python -m examples.run --list                         # Example scenarios (requires LangChain extra)
-uv run python -m examples.run demo1_poisoned_readme --protected
+uv run python -m examples.run coding_agent_poisoned_readme --protected
 uv run pytest                                                # Optional: only meaningful when tests/ is present
 
 # Lint & Format
@@ -30,7 +30,7 @@ uv run mypy janus                # Type check
 uv run mkdocs serve              # Local docs server
 
 # Demos
-uv run python -m examples.run demo1_poisoned_readme --protected    # CLI demo
+uv run python -m examples.run coding_agent_poisoned_readme --protected    # CLI demo
 uv run uvicorn examples.app:app --reload                           # Web demo UI
 ```
 

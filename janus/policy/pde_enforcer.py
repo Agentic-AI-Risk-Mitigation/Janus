@@ -19,11 +19,11 @@ class PDEEnforcer:
 
     def __init__(
         self,
-        agent_role: str = "coding_agent",
+        agent_id: str = "coding_agent",
         token: str = "somerandomkey",
         endpoint: str = "localhost:50051",
     ):
-        self.agent_role = agent_role
+        self.agent_id = agent_id
         self.interceptor = GraphInterceptor(token=token, endpoint=endpoint)
         self._policy = None
 
@@ -51,13 +51,13 @@ class PDEEnforcer:
 
     def enforce(self, tool_name: str, arguments: dict[str, Any]) -> None:
         """Query PDE Graph to see if tool execution is allowed given the current taint level."""
-        allowed = self.interceptor.check_tool_access(tool_name, self.agent_role)
+        allowed = self.interceptor.check_tool_access(tool_name, self.agent_id)
         if not allowed:
             raise PolicyViolation(
                 tool_name=tool_name,
                 arguments=arguments,
                 reason=(
-                    f"Tool '{tool_name}' blocked by PDE for role '{self.agent_role}' "
+                    f"Tool '{tool_name}' blocked by PDE for agent '{self.agent_id}' "
                     f"with taint {self.interceptor.current_taint_level}."
                 ),
             )

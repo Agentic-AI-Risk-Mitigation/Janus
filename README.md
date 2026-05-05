@@ -133,7 +133,7 @@ print(response)
 | `policy` | `str \| Path \| dict \| None` | `None` | Policy source (file path, dict, `"generate"`, or `None`) |
 | `policy_model` | `str \| None` | `"gpt-4o-2024-08-06"` | Model used for LLM-based policy generation |
 | `policy_engine`| `str` | `"janus"` | Enforcer engine to use (`"janus"` or `"pde"`) |
-| `agent_role`   | `str` | `"coding_agent"` | The role assessed during `pde` taint tracking |
+| `agent_id`   | `str` | `"coding_agent"` | Agent identity used for `pde` taint and ACL checks |
 | `api_key` | `str \| None` | `None` | API key (falls back to provider's env var) |
 | `workspace` | `str \| Path \| None` | `cwd` | Root directory for file-system tools |
 | `max_tool_iterations` | `int` | `10` | Max tool-call cycles per `run()` call |
@@ -692,7 +692,7 @@ uv sync --extra langchain --extra dev
 # Start the web UI on http://127.0.0.1:8000
 ./scripts/run_demo_webapp.sh
 
-# Start the web UI and bring up SpiceDB for Demo 5
+# Start the web UI and bring up SpiceDB for PDE scenarios
 ./scripts/run_demo_webapp.sh --with-spicedb
 ```
 
@@ -710,19 +710,19 @@ uv sync --extra langchain --extra dev
 # or: uv sync --extra all --extra dev
 
 # Optional smoke test without SpiceDB
-uv run python -m examples.run demo1_poisoned_readme --protected
+uv run python -m examples.run coding_agent_poisoned_readme --protected
 
 # Start SpiceDB (from project root)
 cd examples && docker compose up -d && cd ..
 
-# Run Demo 5 (taint cascade) with PDE — requires SpiceDB
-uv run python -m examples.run demo5_taint_cascade --protected
+# Run the coding-agent taint cascade with PDE — requires SpiceDB
+uv run python -m examples.run coding_agent_taint_cascade --protected
 
 # Stop SpiceDB when done
 cd examples && docker compose stop && cd ..
 ```
 
-**What Demo 5 exercises:**
+**What the coding-agent taint cascade exercises:**
 - ACL-granted tools (readonly, developer roles) pass at low taint
 - Python taint gate blocks tools when `current_taint > TOOL_TAINT_LIMIT[tool]`
 - After `fetch_url` (medium risk), taint rises; `git_push` (limit 20) is blocked

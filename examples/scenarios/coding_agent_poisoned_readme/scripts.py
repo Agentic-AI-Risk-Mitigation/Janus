@@ -1,5 +1,5 @@
 """
-Scripted LLM responses for Demo 1: The Poisoned README.
+Scripted LLM responses for the coding agent poisoned README scenario.
 
 Two scripts:
 - UNPROTECTED_SCRIPT: Full attack chain. Agent reads .env, exfiltrates to attacker.com.

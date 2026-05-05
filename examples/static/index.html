@@ -138,7 +138,7 @@ html, body {
   flex-shrink: 0;
 }
 
-#demoSelect {
+#experienceSelect, #demoSelect {
   font-family: var(--ui);
   font-size: 12.5px;
   font-weight: 700;
@@ -153,11 +153,38 @@ html, body {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%238b949e' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 9px center;
-  min-width: 200px;
   transition: border-color .2s;
 }
-#demoSelect:hover { border-color: var(--text-muted); }
-#demoSelect:focus { outline: none; border-color: var(--blue); }
+#experienceSelect { min-width: 170px; }
+#demoSelect { min-width: 200px; }
+#experienceSelect:hover, #demoSelect:hover { border-color: var(--text-muted); }
+#experienceSelect:focus, #demoSelect:focus { outline: none; border-color: var(--blue); }
+
+/* Metadata badges */
+.meta-badges {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.badge {
+  font-family: var(--ui);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-2);
+  color: var(--text-dim);
+  background: var(--surface-3);
+  white-space: nowrap;
+}
+.badge-industry   { color: var(--cyan);   border-color: rgba(57,208,216,.3); }
+.badge-persona    { color: var(--purple); border-color: rgba(188,140,255,.3); }
+.badge-marquee    { color: var(--orange); border-color: rgba(240,136,62,.3); }
+.badge-experience { color: var(--blue);   border-color: rgba(88,166,255,.3); }
+.badge-multi      { color: var(--green);  border-color: rgba(63,185,80,.35); }
+.badge-workflow   { color: #d2a8ff;       border-color: rgba(210,168,255,.35); }
 
 .btn-run {
   background: linear-gradient(135deg, var(--blue), var(--purple));
@@ -419,8 +446,13 @@ html, body {
     <div class="scenario-desc-inline" id="scenarioDescInline"></div>
   </div>
 
-  <!-- Controls: dropdown + run + reset -->
+  <!-- Controls: experience + scenario + run + reset -->
   <div class="header-controls">
+    <select id="experienceSelect" onchange="onExperienceChange()">
+      <option value="">All Experiences</option>
+      <option value="langchain_single">LangChain Single-Agent</option>
+      <option value="adk_multi">ADK Multi-Agent</option>
+    </select>
     <select id="demoSelect" onchange="onScenarioChange()"></select>
     <button class="btn-run"   id="startBtn" onclick="startDemo()">▶ Run Demo</button>
     <button class="btn-reset" id="resetBtn" onclick="resetDemo()">↺</button>
@@ -428,9 +460,14 @@ html, body {
 
 </div>
 
+<!-- ══ Metadata badge strip ═════════════════════════════════════════ -->
+<div class="query-strip" id="badgeStrip">
+  <div class="meta-badges" id="metaBadges"></div>
+</div>
+
 <!-- ══ Developer query strip (full width, compact) ══════════════════ -->
 <div class="query-strip" id="queryStrip">
-  <span class="prefix">👤 Developer:</span>
+  <span class="prefix">👤 User:</span>
   <span class="qtext" id="userQueryText"></span>
 </div>
 
@@ -475,6 +512,7 @@ html, body {
 <script>
 const WS_URL = `ws://${location.host}/ws`;
 let ws = null;
+let _allScenarios = [];
 let _scenarios = [];
 const _panelAttacks = { left: [], right: [] };
 
@@ -483,20 +521,33 @@ const _panelAttacks = { left: [], right: [] };
 async function loadScenarios() {
   try {
     const resp = await fetch('/api/scenarios');
-    _scenarios = await resp.json();
-    const sel = document.getElementById('demoSelect');
-    sel.innerHTML = '';
-    for (const s of _scenarios) {
-      const opt = document.createElement('option');
-      opt.value = s.name;
-      opt.textContent = s.title;
-      sel.appendChild(opt);
-    }
+    _allScenarios = await resp.json();
+    _scenarios = _allScenarios;
+    populateScenarioSelect();
     updateScenarioCard();
   } catch (e) {
     document.getElementById('scenarioTitle').textContent =
       'Could not load scenarios — is the server running?';
   }
+}
+
+function populateScenarioSelect() {
+  const sel = document.getElementById('demoSelect');
+  sel.innerHTML = '';
+  for (const s of _scenarios) {
+    const opt = document.createElement('option');
+    opt.value = s.name;
+    opt.textContent = s.title;
+    sel.appendChild(opt);
+  }
+}
+
+function onExperienceChange() {
+  const exp = document.getElementById('experienceSelect').value;
+  _scenarios = exp ? _allScenarios.filter(s => s.experience === exp) : _allScenarios;
+  populateScenarioSelect();
+  resetDemo();
+  updateScenarioCard();
 }
 
 function getSelectedScenario() {
@@ -511,19 +562,46 @@ function onScenarioChange() {
 
 function updateScenarioCard() {
   const s = getSelectedScenario();
-  if (!s) return;
+  if (!s) {
+    document.getElementById('scenarioTitle').textContent = 'Select a scenario';
+    document.getElementById('scenarioDescInline').textContent = '';
+    document.getElementById('badgeStrip').classList.remove('visible');
+    document.getElementById('queryStrip').classList.remove('visible');
+    return;
+  }
 
   document.getElementById('scenarioTitle').textContent = s.title;
 
   // Show first sentence of description (up to first \n) as inline subtitle
   const firstLine = (s.description || '').split('\n')[0].replace(/^[🎯☠️🌊💀🛡⚠️]+\s*/u, '').trim();
   document.getElementById('scenarioDescInline').textContent = firstLine;
-  // Full description in title tooltip
   document.getElementById('scenarioDescInline').title = s.description || '';
 
-  const strip    = document.getElementById('queryStrip');
-  const qText    = document.getElementById('userQueryText');
+  // Metadata badges
+  const badgeStrip = document.getElementById('badgeStrip');
+  const badgesEl = document.getElementById('metaBadges');
+  badgesEl.innerHTML = '';
+  const badges = [];
+  if (s.experience) badges.push({ cls: 'badge-experience', text: s.experience === 'langchain_single' ? 'LangChain Single-Agent' : 'ADK Multi-Agent' });
+  if (Number(s.agent_count || 1) > 1) badges.push({ cls: 'badge-multi', text: `${s.agent_count}-Agent Workflow` });
+  if (s.agent_topology) badges.push({ cls: 'badge-workflow', text: s.agent_topology });
+  if (s.industry) badges.push({ cls: 'badge-industry', text: s.industry });
+  if (s.persona) badges.push({ cls: 'badge-persona', text: s.persona });
+  if (s.marquee_capability) badges.push({ cls: 'badge-marquee', text: s.marquee_capability });
+  for (const b of badges) {
+    const span = document.createElement('span');
+    span.className = `badge ${b.cls}`;
+    span.textContent = b.text;
+    badgesEl.appendChild(span);
+  }
+  badgeStrip.classList.toggle('visible', badges.length > 0);
+
+  // User query strip
+  const strip = document.getElementById('queryStrip');
+  const qText = document.getElementById('userQueryText');
+  const prefix = document.querySelector('#queryStrip .prefix');
   if (s.user_prompt) {
+    prefix.textContent = s.persona ? `👤 ${s.persona}:` : '👤 User:';
     qText.textContent = `"${s.user_prompt}"`;
     strip.classList.add('visible');
   } else {
@@ -602,27 +680,27 @@ function handleEvent(evt) {
   switch (evt.event_type) {
 
     case 'chat_message':
-      addChat(chatEl, evt.role, evt.content);
+      addChat(chatEl, evt.role, evt.content, evt.agent_role || '');
       break;
 
     case 'tool_call':
-      addTerm(termEl, 'tool-call', fmtCall(evt.tool, evt.args));
+      addTerm(termEl, 'tool-call', withAgentPrefix(evt, fmtCall(evt.tool, evt.args)));
       break;
 
     case 'tool_result': {
       const cls = evt.success ? 'tool-result' : 'tool-result block';
       const r = evt.result.length > 160 ? evt.result.slice(0, 160) + '…' : evt.result;
-      addTerm(termEl, cls, r);
+      addTerm(termEl, cls, withAgentPrefix(evt, r));
       break;
     }
 
     case 'janus_decision':
       if (evt.allowed) {
-        addTerm(termEl, 'allow', `[ALLOW] ${evt.tool}(${fmtArgs(evt.args)})`);
+        addTerm(termEl, 'allow', withAgentPrefix(evt, `[ALLOW] ${evt.tool}(${fmtArgs(evt.args)})`));
       } else {
         const reason = evt.reason.split('Details:')[0].trim();
-        addTerm(termEl, 'block', `[BLOCK] ${evt.tool}(${fmtArgs(evt.args)})`);
-        if (reason) addTerm(termEl, 'block', `  ${reason}`);
+        addTerm(termEl, 'block', withAgentPrefix(evt, `[BLOCK] ${evt.tool}(${fmtArgs(evt.args)})`));
+        if (reason) addTerm(termEl, 'block', withAgentPrefix(evt, `  ${reason}`));
       }
       break;
 
@@ -692,18 +770,29 @@ function _finalisePanel(side) {
 
 // ── DOM helpers ──────────────────────────────────────────────────────
 
-function addChat(container, role, content) {
+function addChat(container, role, content, agentRole='') {
   const div = document.createElement('div');
   div.className = `msg ${role}`;
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = role === 'user' ? 'Developer' : 'Agent';
+  let displayContent = content;
+  if (role === 'user') {
+    label.textContent = 'User';
+  } else {
+    const roleMatch = content.match(/^\[([^\]]+)\]\s*/);
+    label.textContent = agentRole || (roleMatch ? roleMatch[1] : 'Agent');
+    if (roleMatch) displayContent = content.slice(roleMatch[0].length);
+  }
   div.appendChild(label);
   const text = document.createElement('div');
-  text.textContent = content;
+  text.textContent = displayContent;
   div.appendChild(text);
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
+}
+
+function withAgentPrefix(evt, text) {
+  return evt.agent_role ? `[${evt.agent_role}] ${text}` : text;
 }
 
 function addTerm(container, className, text) {

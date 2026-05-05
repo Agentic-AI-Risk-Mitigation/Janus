@@ -12,7 +12,7 @@ Enable with `policy_engine="pde"` when creating `JanusAgent`:
 agent = JanusAgent(
     model="openai/gpt-4o",
     policy_engine="pde",
-    agent_role="coding_agent",
+    agent_id="coding_agent",
 )
 ```
 
@@ -68,7 +68,7 @@ Tools are grouped by risk. Tier 4 tools have no ACL edges and are always denied.
    cd examples && docker compose up -d && cd ..
    ```
 
-2. Use the engine via the demo scenario or Janus: Demo 5 bootstraps the demo schema and relationships when you run it (web app or `uv run python -m examples.run demo5_taint_cascade --protected`). The PDE code lives in `janus/policy/pde/`; `janus.policy.pde_enforcer.PDEEnforcer` wraps `GraphInterceptor` from `janus.policy.pde.interceptor` and uses a sync gRPC client so it works inside an asyncio event loop (e.g. uvicorn).
+2. Use the engine via the demo scenario or Janus: the coding-agent taint cascade scenario bootstraps the demo schema and relationships when you run it (web app or `uv run python -m examples.run coding_agent_taint_cascade --protected`). The PDE code lives in `janus/policy/pde/`; `janus.policy.pde_enforcer.PDEEnforcer` wraps `GraphInterceptor` from `janus.policy.pde.interceptor` and uses a sync gRPC client so it works inside an asyncio event loop (e.g. uvicorn).
 
 3. Call `agent.update_taint(risk)` (or the scenario’s taint callback) when the agent reads from risky sources (e.g. after `fetch_url` or reading untrusted files).
 

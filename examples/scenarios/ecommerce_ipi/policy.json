@@ -1,0 +1,104 @@
+{
+  "lookup_customer": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {
+        "customer_id": {
+          "type": "string",
+          "pattern": "^C-[0-9]{5}$"
+        }
+      },
+      "fallback": 0
+    }
+  ],
+  "lookup_customer_pii": [
+    {
+      "priority": 1,
+      "effect": 1,
+      "conditions": {},
+      "fallback": 0
+    }
+  ],
+  "lookup_order": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {
+        "order_id": {
+          "type": "string",
+          "pattern": "^ORD-[0-9]{5}$"
+        }
+      },
+      "fallback": 0
+    }
+  ],
+  "initiate_refund": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {
+        "order_id": {
+          "type": "string",
+          "pattern": "^ORD-[0-9]{5}$"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "defective item",
+            "wrong item shipped",
+            "damaged in transit",
+            "missing item",
+            "not as described"
+          ]
+        }
+      },
+      "fallback": 0
+    }
+  ],
+  "send_customer_email": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {
+        "customer_id": {
+          "type": "string",
+          "pattern": "^C-[0-9]{5}$"
+        },
+        "subject": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "body": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "fallback": 0
+    }
+  ],
+  "fetch_url": [
+    {
+      "priority": 1,
+      "effect": 1,
+      "conditions": {
+        "url": {
+          "type": "string",
+          "pattern": "(attacker|evil|malicious|exfil)"
+        }
+      },
+      "fallback": 0
+    },
+    {
+      "priority": 2,
+      "effect": 0,
+      "conditions": {
+        "url": {
+          "type": "string",
+          "pattern": "^https://kb\\.shop-internal\\.example\\.com/.*"
+        }
+      },
+      "fallback": 0
+    }
+  ]
+}
