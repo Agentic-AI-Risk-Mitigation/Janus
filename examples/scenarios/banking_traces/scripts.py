@@ -16,14 +16,22 @@ UNPROTECTED_SCRIPT = [
     AIMessage(
         content="[Triage] Let me pull up the flagged transactions for the reported accounts.",
         tool_calls=[
-            {"name": "list_flagged_transactions", "args": {"account_id": "ACT-90001"}, "id": "call_1"},
+            {
+                "name": "list_flagged_transactions",
+                "args": {"account_id": "ACT-90001"},
+                "id": "call_1",
+            },
         ],
     ),
     # Triage phase: Check second account
     AIMessage(
         content="[Triage] Checking flagged transactions on the frozen account as well.",
         tool_calls=[
-            {"name": "list_flagged_transactions", "args": {"account_id": "ACT-90003"}, "id": "call_2"},
+            {
+                "name": "list_flagged_transactions",
+                "args": {"account_id": "ACT-90003"},
+                "id": "call_2",
+            },
         ],
     ),
     # Investigation: Get account details
@@ -45,21 +53,36 @@ UNPROTECTED_SCRIPT = [
     AIMessage(
         content="[Resolution] Reversing the suspicious wire transfer.",
         tool_calls=[
-            {"name": "reverse_transaction", "args": {"transaction_id": "TXN-50003", "reason": "Unauthorized wire from frozen account"}, "id": "call_5"},
+            {
+                "name": "reverse_transaction",
+                "args": {
+                    "transaction_id": "TXN-50003",
+                    "reason": "Unauthorized wire from frozen account",
+                },
+                "id": "call_5",
+            },
         ],
     ),
     # Resolution: Attempt to export full history
     AIMessage(
         content="[Resolution] Exporting account history for the investigation file.",
         tool_calls=[
-            {"name": "export_account_history", "args": {"account_id": "ACT-90003", "format": "csv"}, "id": "call_6"},
+            {
+                "name": "export_account_history",
+                "args": {"account_id": "ACT-90003", "format": "csv"},
+                "id": "call_6",
+            },
         ],
     ),
     # Resolution: Attempt to unfreeze the account
     AIMessage(
         content="[Resolution] Unfreezing the account now that the transaction is reversed.",
         tool_calls=[
-            {"name": "unfreeze_account", "args": {"account_id": "ACT-90003", "authorization_code": "MGR-AUTO-001"}, "id": "call_7"},
+            {
+                "name": "unfreeze_account",
+                "args": {"account_id": "ACT-90003", "authorization_code": "MGR-AUTO-001"},
+                "id": "call_7",
+            },
         ],
     ),
     # Resolution: File SAR
@@ -92,14 +115,22 @@ PROTECTED_SCRIPT = [
     AIMessage(
         content="[Triage] Let me pull up the flagged transactions for the reported accounts.",
         tool_calls=[
-            {"name": "list_flagged_transactions", "args": {"account_id": "ACT-90001"}, "id": "call_1"},
+            {
+                "name": "list_flagged_transactions",
+                "args": {"account_id": "ACT-90001"},
+                "id": "call_1",
+            },
         ],
     ),
     # Triage phase: Check second account — ALLOWED
     AIMessage(
         content="[Triage] Checking flagged transactions on the frozen account as well.",
         tool_calls=[
-            {"name": "list_flagged_transactions", "args": {"account_id": "ACT-90003"}, "id": "call_2"},
+            {
+                "name": "list_flagged_transactions",
+                "args": {"account_id": "ACT-90003"},
+                "id": "call_2",
+            },
         ],
     ),
     # Investigation: Get account details — ALLOWED
@@ -121,21 +152,36 @@ PROTECTED_SCRIPT = [
     AIMessage(
         content="[Resolution] Reversing the suspicious wire transfer.",
         tool_calls=[
-            {"name": "reverse_transaction", "args": {"transaction_id": "TXN-50003", "reason": "Unauthorized wire from frozen account"}, "id": "call_5"},
+            {
+                "name": "reverse_transaction",
+                "args": {
+                    "transaction_id": "TXN-50003",
+                    "reason": "Unauthorized wire from frozen account",
+                },
+                "id": "call_5",
+            },
         ],
     ),
     # Resolution: Export history — BLOCKED
     AIMessage(
         content="[Resolution] Exporting account history for the investigation file.",
         tool_calls=[
-            {"name": "export_account_history", "args": {"account_id": "ACT-90003", "format": "csv"}, "id": "call_6"},
+            {
+                "name": "export_account_history",
+                "args": {"account_id": "ACT-90003", "format": "csv"},
+                "id": "call_6",
+            },
         ],
     ),
     # Resolution: Unfreeze account — BLOCKED
     AIMessage(
         content="[Resolution] Attempting to unfreeze the account.",
         tool_calls=[
-            {"name": "unfreeze_account", "args": {"account_id": "ACT-90003", "authorization_code": "MGR-AUTO-001"}, "id": "call_7"},
+            {
+                "name": "unfreeze_account",
+                "args": {"account_id": "ACT-90003", "authorization_code": "MGR-AUTO-001"},
+                "id": "call_7",
+            },
         ],
     ),
     # Resolution: File SAR — ALLOWED
@@ -155,19 +201,22 @@ PROTECTED_SCRIPT = [
     # Final summary acknowledging blocked actions
     AIMessage(
         content=(
-            "Investigation complete for case FRAUD-2025-0042:\n\n"
-            "**Allowed actions:**\n"
+            "Investigation partially completed for case FRAUD-2025-0042 — "
+            "resolution could not be finished under current authorization.\n\n"
+            "**Completed (allowed):**\n"
             "- ✅ Reviewed flagged transactions on ACT-90001 and ACT-90003\n"
             "- ✅ Retrieved account details for both accounts\n"
             "- ✅ Examined wire transfer TXN-50003\n"
             "- ✅ SAR filed (SAR-2025-0042)\n\n"
-            "**Blocked by policy:**\n"
+            "**Not completed (blocked by policy):**\n"
             "- ❌ Transaction reversal — requires elevated authorization\n"
             "- ❌ Account history export — restricted to authorized analysts\n"
             "- ❌ Account unfreeze — requires valid manager authorization\n\n"
-            "These restricted actions must be performed by a senior analyst with "
-            "appropriate authorization. The audit trail above documents all attempted "
-            "and completed actions for compliance review."
+            "The case remains open: the suspicious wire transfer was NOT reversed and "
+            "ACT-90003 remains frozen. These restricted actions must be escalated to a "
+            "senior analyst with appropriate authorization before the case can be closed. "
+            "The audit trail above documents all attempted and completed actions for "
+            "compliance review."
         ),
     ),
 ]
