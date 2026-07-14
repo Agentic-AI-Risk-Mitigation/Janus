@@ -2,15 +2,21 @@
 
 ## Install
 
-Requires Python ≥ 3.11. [uv](https://docs.astral.sh/uv/) is the recommended package manager.
+Requires Python ≥ 3.10. [uv](https://docs.astral.sh/uv/) is the recommended package manager.
 
 ```bash
 uv add janus-guard
 ```
 
-Optional extras for providers and adapters:
+The core install is dependency-light — no SpiceDB/`authzed`, no web server — so
+the standalone `PolicyEnforcer` (`from janus.policy import PolicyEnforcer`) can be
+used as a tool-call gate without pulling in the optional stacks.
+
+Optional extras for features, providers, and adapters:
 
 ```bash
+uv add "janus-guard[pde]"         # SpiceDB-backed ReBAC + taint tracking (PDEEnforcer)
+uv add "janus-guard[server]"      # Example web demo UI (FastAPI + uvicorn)
 uv add "janus-guard[anthropic]"   # Anthropic Claude
 uv add "janus-guard[google]"      # Google Gemini
 uv add "janus-guard[langchain]"   # LangChain adapter
@@ -39,8 +45,7 @@ To build docs locally (from the project root): `uv sync --extra docs` then `uv r
 **Web app (split-panel, recommended):**
 
 ```bash
-uv pip install -e ".[langchain,dev]"
-uv pip install fastapi "uvicorn[standard]" websockets pyyaml authzed
+uv pip install -e ".[server,pde,langchain,dev]"
 cd examples && docker compose up -d && cd ..   # only needed for PDE-backed scenarios
 uv run uvicorn examples.app:app --reload
 ```

@@ -137,7 +137,11 @@ class JanusAgent:
         # Policy enforcer
         self.enforcer: PolicyEnforcer
         if policy_engine == "pde":
-            from janus.policy.pde_enforcer import PDEEnforcer
+            # Routed through the package's lazy __getattr__ so a missing 'pde'
+            # extra surfaces an actionable ImportError instead of a raw
+            # ModuleNotFoundError for authzed.
+            from janus.policy import PDEEnforcer
+
             self.enforcer = PDEEnforcer(agent_id=agent_id)  # type: ignore[assignment]
         else:
             self.enforcer = PolicyEnforcer()

@@ -6,6 +6,17 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Lightweight core install**: the core package no longer depends on `authzed`, `fastapi`, or `uvicorn`. `PolicyEnforcer` and the static-policy path now import only `jsonschema` + `pydantic` (+ `jinja2`/`python-dotenv`/`openai` for generation and the default provider), so `from janus.policy import PolicyEnforcer` works as a standalone tool-call gate without the SpiceDB/PDE stack.
+- **New optional extras**: `janus-guard[pde]` (SpiceDB-backed ReBAC + taint tracking / `PDEEnforcer`) and `janus-guard[server]` (FastAPI/uvicorn demo webapp). `authzed`, `fastapi`, and `uvicorn[standard]` moved out of core into these extras; they are still bundled in `[all]` and `[dev]`.
+- **`PDEEnforcer` is now imported lazily** (PEP 562 `__getattr__` in `janus.policy`). Using the PDE engine (`policy_engine="pde"` or `from janus.policy import PDEEnforcer`) without the `pde` extra installed raises a clear, actionable `ImportError` instead of a raw `ModuleNotFoundError` for `authzed`.
+- **Python 3.10 supported**: lowered `requires-python` to `>=3.10` (core modules use no 3.11-only features; ruff/mypy targets updated accordingly).
+
+### Added
+
+- Regression tests (`tests/test_standalone_enforcer.py`) covering standalone `PolicyEnforcer` import/enforcement (callable + JSON-Schema conditions, default-deny, all three fallbacks) with `authzed` unimportable, and the actionable PDE `ImportError`.
+
 ## [0.0.4] — 2026-03-13 (Alpha)
 
 ### Changed

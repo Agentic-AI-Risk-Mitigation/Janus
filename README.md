@@ -70,17 +70,23 @@ Janus intercepts every tool call an LLM agent makes and validates it against a s
 
 ## Installation
 
-Requires Python ≥ 3.11. [uv](https://docs.astral.sh/uv/) is the recommended package manager.
+Requires Python ≥ 3.10. [uv](https://docs.astral.sh/uv/) is the recommended package manager.
 
-**Core (OpenAI / OpenAI-compatible providers):**
+**Core (standalone `PolicyEnforcer` + OpenAI / OpenAI-compatible providers):**
 
 ```bash
 uv add janus-guard
 ```
 
-**With optional provider extras:**
+The core install has no SpiceDB/`authzed` or web-server dependencies, so
+`from janus.policy import PolicyEnforcer` works on its own for use as a
+lightweight tool-call gate.
+
+**With optional provider / feature extras:**
 
 ```bash
+uv add "janus-guard[pde]"         # SpiceDB-backed ReBAC + taint tracking (PDEEnforcer)
+uv add "janus-guard[server]"      # Example web demo UI (FastAPI + uvicorn)
 uv add "janus-guard[anthropic]"   # Anthropic Claude
 uv add "janus-guard[google]"      # Google Gemini
 uv add "janus-guard[bedrock]"     # AWS Bedrock

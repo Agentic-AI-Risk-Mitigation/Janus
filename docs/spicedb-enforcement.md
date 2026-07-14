@@ -4,6 +4,19 @@
 
 The SpiceDB engine is an optional enforcement backend that combines relationship-based access control (ReBAC) via SpiceDB with runtime taint tracking. Use it when you need role-based tool access and automatic permission degradation as the agent reads from untrusted data.
 
+## Install
+
+The SpiceDB engine lives behind the optional `pde` extra (it pulls in `authzed`).
+It is **not** part of the core install, so `PolicyEnforcer` and the static-policy
+engine work without it:
+
+```bash
+uv add "janus-guard[pde]"
+```
+
+Using `policy_engine="pde"` (or importing `PDEEnforcer`) without this extra raises
+an actionable `ImportError` pointing you here.
+
 ## Overview
 
 Enable with `policy_engine="pde"` when creating `JanusAgent`:

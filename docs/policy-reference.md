@@ -53,9 +53,33 @@ When you only need to restrict argument values, use the shorthand. It implies pr
 | `conditions` | dict | JSON Schema restrictions keyed by argument name |
 | `fallback` | int | `0` = raise `PolicyViolation`, `1` = `sys.exit(1)`, `2` = ask user |
 
+## Standalone Enforcement
+
+`PolicyEnforcer` ships in the **core** install (`uv add janus-guard`) and depends
+only on `jsonschema` + `pydantic` — no SpiceDB/`authzed`, no web server. This makes
+it usable as a drop-in default-deny gate inside any tool-call loop:
+
+```python
+from janus.policy import PolicyEnforcer
+from janus.exceptions import PolicyViolation
+
+enforcer = PolicyEnforcer({"read_file": [(1, 0, {}, 0)]})
+try:
+    enforcer.enforce("read_file", {"path": "a.txt"})   # allowed
+    enforcer.enforce("send_email", {"to": "x@y.z"})    # not listed -> PolicyViolation
+except PolicyViolation as exc:
+    ...
+```
+
+The SpiceDB/taint engine (`PDEEnforcer`) lives behind the optional `pde` extra —
+see [SpiceDB-Backed Enforcement](spicedb-enforcement.md).
+
 ## Condition Schemas
 
-Conditions follow JSON Schema syntax. Common patterns:
+A condition value may be a JSON-Schema `dict`, a regex `str`, or a **callable**
+predicate (`value -> truthy`, or raises to reject) — useful for runtime checks
+such as SSRF/URL validation that JSON Schema cannot express. Conditions follow
+JSON Schema syntax. Common patterns:
 
 ```json
 { "type": "string", "pattern": "^/safe/path/.*" }

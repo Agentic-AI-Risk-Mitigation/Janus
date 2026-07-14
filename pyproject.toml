@@ -7,12 +7,13 @@ name = "janus-guard"
 version = "0.0.4"
 description = "System-level security for LLM agents via fine-grained policy enforcement on tool calls."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 keywords = ["llm", "security", "agents", "policy", "tool-calling"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Security",
@@ -20,19 +21,22 @@ classifiers = [
 ]
 
 dependencies = [
-    # Core
+    # Core — the minimum for the standalone PolicyEnforcer, static-policy
+    # loading, and LLM-based policy generation. No SpiceDB/authzed, no web
+    # server: those live behind the optional 'pde' and 'server' extras.
     "jsonschema>=4.0",
     "pydantic>=2.0",
     "jinja2>=3.1",
     "python-dotenv>=1.0",
     # Default LLM provider (OpenAI-compatible)
     "openai>=1.0,<2.0",
-    "fastapi>=0.135.1",
-    "uvicorn[standard]>=0.41.0",
-    "authzed>=1.24.3",
 ]
 
 [project.optional-dependencies]
+# SpiceDB-backed ReBAC enforcement with runtime taint tracking (PDEEnforcer).
+pde       = ["authzed>=1.24.3"]
+# Example web demo UI (examples/app.py).
+server    = ["fastapi>=0.135.1", "uvicorn[standard]>=0.41.0"]
 anthropic = ["anthropic>=0.25"]
 google    = ["google-genai>=1.0"]
 bedrock   = ["boto3>=1.26"]
@@ -43,6 +47,9 @@ langchain = [
 ]
 adk       = ["google-genai>=1.0"]
 all       = [
+    "authzed>=1.24.3",
+    "fastapi>=0.135.1",
+    "uvicorn[standard]>=0.41.0",
     "anthropic>=0.25",
     "google-genai>=1.0",
     "boto3>=1.26",
@@ -51,6 +58,11 @@ all       = [
     "langchain-openai>=0.2",
 ]
 dev = [
+    # PDE + server extras included so the full test suite (including the
+    # SpiceDB/taint path) and demo webapp can run under `janus-guard[dev]`.
+    "authzed>=1.24.3",
+    "fastapi>=0.135.1",
+    "uvicorn[standard]>=0.41.0",
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
     "ruff>=0.4",
@@ -76,7 +88,7 @@ packages = ["janus"]
 # ---------------------------------------------------------------------------
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
@@ -86,7 +98,7 @@ ignore = ["E501"]
 # Mypy
 # ---------------------------------------------------------------------------
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.10"
 strict = false
 ignore_missing_imports = true
 
