@@ -72,4 +72,4 @@ For PDE-backed scenarios, make sure SpiceDB is available before running the prot
 - `examples/scenarios/<name>/` contains each scenario's `scenario.py`, `scripts.py`, workspace files, and policy or PDE bootstrap data.
 - `examples/docker-compose.yml` starts the local SpiceDB dependency used by PDE demos.
 
-For the underlying scenario framework and setup details, see [examples/README.md](../examples/README.md).
+For the underlying scenario framework and setup details, see [examples/README.md](https://github.com/Agentic-AI-Risk-Mitigation/Janus/blob/main/examples/README.md).
