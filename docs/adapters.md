@@ -70,9 +70,10 @@ ready `hooks=` dict.
   invoked as `mcp__research__fetch`. The adapter maps that back to the bare policy key (`fetch`)
   via `default_resolve_name`. Pass `resolve_name=lambda n: n` if your policy uses the full
   prefixed names.
-- **Missing-argument backstop.** The core enforcer only checks a condition when its argument is
-  present, so an omitted argument silently skips a gate. Pass `required_args={"tool": ["arg"]}`
-  and the adapter rejects a call whose named argument is absent or empty before enforcing.
+- **Missing-argument backstop.** The core enforcer fails closed when a conditioned argument is
+  omitted (strict conditions, default since 0.0.6). Pass `required_args={"tool": ["arg"]}` to
+  additionally reject calls whose named argument is absent or blank — covering arguments no
+  condition names, before enforcement runs.
 
 ### Alternative seam — `can_use_tool` callback
 

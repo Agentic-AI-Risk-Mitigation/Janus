@@ -112,11 +112,14 @@ def test_hook_backstops_missing_url():
     assert _denied(_run_hook(hook, "mcp__research__fetch_page", {"url": "   "}))
 
 
-def test_hook_without_required_args_has_the_bypass():
-    # Documents that the bypass is real when you DON'T pass required_args.
+def test_hook_denies_missing_arg_even_without_required_args():
+    # The core enforcer's strict condition semantics (strict_conditions=True,
+    # the default) close the historical absent-argument bypass: an allow rule
+    # conditioned on ``url`` no longer matches a call that omits ``url``.
+    # ``required_args`` remains as a belt-and-braces guard (and catches blank
+    # strings a permissive condition schema might let through).
     hook = janus_pretooluse_hook(POLICY)  # no required_args
-    out = _run_hook(hook, "mcp__research__fetch_page", {})
-    assert out == {}  # absent url -> condition skipped -> allowed
+    assert _denied(_run_hook(hook, "mcp__research__fetch_page", {}))
 
 
 # --- StructuredOutput passthrough ----------------------------------------------

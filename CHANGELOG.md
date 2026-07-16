@@ -6,6 +6,34 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING — strict condition semantics by default, closing the missing-argument bypass.**
+  Previously the enforcer only checked a condition when its argument was *present*, so a rule
+  gating `url` was silently skipped if the model omitted `url` entirely — an allow rule could
+  vouch for a call it never inspected. Now (`strict_conditions=True`, the default) an allow rule
+  whose condition names an absent argument does **not** match, and the call falls through to
+  default-deny. Deny rules already failed closed (a condition on an absent argument matches
+  vacuously) and are unchanged. Policies that relied on "constrain only if provided" can opt
+  back into the legacy behavior with `PolicyEnforcer(strict_conditions=False)`.
+
+### Added
+
+- **Core `required_args`**: `PolicyEnforcer(required_args={"tool": ["arg", …]})` requires named
+  arguments to be present and non-empty (rejecting `None` and blank strings) before rule
+  evaluation, complementing strict conditions for arguments no condition covers. Promoted from
+  the Claude Agent SDK adapter, which now delegates to the shared
+  `janus.policy.enforcer.check_required_args` (its per-call `required_args` parameter is
+  unchanged).
+- **Enforcer semantics regression suite** (`tests/test_enforcer_semantics.py`): priority
+  ordering, deny-before-allow tie-break at equal priority, default-deny, strict/legacy
+  missing-argument behavior, `required_args`, policy management, and fallback actions.
+- **Indirect-prompt-injection scenario suite** (`tests/test_ipi_scenarios.py`): replay-style
+  attack/legitimate tool-call sequences under an outreach-pipeline-shaped policy — poisoned
+  page → email exfiltration, malicious reply → missing-argument bypass, honeypot log → SSRF /
+  attacker-directed scans — asserting attacks are blocked and legitimate twins still flow.
+- **CI test workflow** (`.github/workflows/test.yml`): pytest + ruff + mypy on Python 3.10–3.13.
+
 ## [0.0.5] — 2026-07-16 (Alpha)
 
 ### Added

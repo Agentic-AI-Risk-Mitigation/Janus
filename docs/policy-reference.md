@@ -98,6 +98,33 @@ JSON Schema syntax. Common patterns:
 
 At equal priority, deny rules are evaluated before allow rules.
 
+### Missing arguments fail closed
+
+A condition on an argument the call does not provide cannot be satisfied by omitting the
+argument:
+
+- **Allow rules**: a condition on an absent argument fails the rule (the call falls through to
+  default-deny). An allow rule only vouches for calls that actually carry the arguments it
+  constrains.
+- **Deny rules**: a condition on an absent argument matches vacuously, so the deny applies.
+
+The allow-rule behavior is controlled by `PolicyEnforcer(strict_conditions=...)` — `True` by
+default. Setting it to `False` restores the pre-0.0.6 behavior of skipping conditions on absent
+arguments; only do this if a policy deliberately means "constrain this argument *if provided*",
+and understand that the model can then bypass the restriction by omitting the argument.
+
+### Required arguments
+
+Independent of conditions, `PolicyEnforcer(required_args={"tool": ["arg", …]})` rejects any
+call to `tool` whose named arguments are absent, `None`, or blank strings — useful for
+arguments no condition covers (or tools with only deny rules):
+
+```python
+enforcer = PolicyEnforcer(required_args={"send_email": ["to"]})
+enforcer.load(policy)
+enforcer.enforce("send_email", {"body": "hi"})  # PolicyViolation: missing 'to'
+```
+
 ## LLM-Generated Policies
 
 Janus can generate policies from a user query and tool set.

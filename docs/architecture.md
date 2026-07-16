@@ -71,7 +71,7 @@ Janus sits between the LLM agent and its tools. Every tool call is intercepted, 
 
 ## Known Limitations
 
-- **Missing arguments**: The JSON enforcer validates only arguments that are present. If the LLM omits an argument that a policy condition restricts, the condition is skipped and the call may be allowed. Fix planned: raise `ArgumentValidationError` when a restricted argument is missing.
+- **Missing arguments** *(fixed in 0.0.6)*: The JSON enforcer now fails closed when a call omits an argument that a policy condition restricts — the allow rule does not match and the call falls through to default-deny (`strict_conditions=True`, the default; `False` restores the legacy skip). A per-tool `required_args` option additionally rejects absent/blank arguments that no condition covers.
 - **Taint session reset**: Taint only increases during a session. Long-running services need a way to reset (e.g. per-request sessions). No `reset_session()` yet.
 - **SpiceDB unreachable**: If SpiceDB is down, the engine raises a gRPC exception. No timeout, retry, or fail-closed toggle.
 - **Schema divergence**: The SpiceDB schema lives in `janus/policy/pde/config.py`; bootstrap and relationships are in `pde/bootstrap.py`.

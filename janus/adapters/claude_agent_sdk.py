@@ -60,6 +60,7 @@ from typing import Any
 from janus.adapters._base import PolicySource, resolve_enforcer
 from janus.exceptions import PolicyViolation
 from janus.logger import get_logger
+from janus.policy.enforcer import RequiredArgs, check_required_args
 
 # SDK-internal tools that are part of the transport, not the agent's toolset, and
 # must never be policy-gated. ``StructuredOutput`` delivers an ``output_format``
@@ -72,31 +73,19 @@ DEFAULT_PASSTHROUGH_TOOLS = frozenset({"StructuredOutput"})
 _MCP_PREFIX_RE = re.compile(r"^mcp__.+?__")
 
 NameResolver = Callable[[str], str]
-RequiredArgs = dict[str, list[str]]
+
+# The required-args backstop now lives in the core engine
+# (janus.policy.enforcer.check_required_args); this adapter keeps its per-call
+# ``required_args`` parameter and delegates. With the core enforcer's strict
+# condition semantics (strict_conditions=True default), an allow rule already
+# refuses calls that omit a conditioned argument — required_args remains useful
+# for arguments no condition covers and for rejecting blank strings.
+_check_required_args = check_required_args
 
 
 def default_resolve_name(tool_name: str) -> str:
     """Map an SDK runtime tool name to its policy key (strip ``mcp__server__``)."""
     return _MCP_PREFIX_RE.sub("", tool_name)
-
-
-def _check_required_args(policy_key: str, arguments: dict, required_args: RequiredArgs) -> None:
-    """Backstop Janus's absent-argument bypass.
-
-    ``PolicyEnforcer`` only checks a condition when its argument is *present*, so
-    a rule that gates ``url`` is silently skipped if the model omits ``url``
-    entirely (or sends it blank). For any tool listed in ``required_args`` we
-    require each named argument to be present and non-empty, raising
-    ``PolicyViolation`` otherwise — the same guard secure's reply_agent hand-rolled.
-    """
-    for arg in required_args.get(policy_key, ()):
-        val = arguments.get(arg)
-        if val is None or (isinstance(val, str) and not val.strip()):
-            raise PolicyViolation(
-                tool_name=policy_key,
-                arguments=arguments,
-                reason=f"missing or empty required argument '{arg}'",
-            )
 
 
 def _decide(
@@ -148,7 +137,9 @@ def janus_pretooluse_hook(
         Any source ``resolve_enforcer`` accepts.
     required_args : dict[str, list[str]] | None
         ``{policy_key: [arg, …]}`` — arguments that must be present and non-empty
-        for that tool, closing Janus's absent-argument bypass. Keyed on the
+        for that tool. The core enforcer's strict condition semantics already
+        deny calls that omit a conditioned argument; this additionally covers
+        arguments no condition names, and blank strings. Keyed on the
         resolved (bare) policy name, e.g. ``{"fetch_page": ["url"]}``.
     passthrough_tools : frozenset[str]
         Tool names allowed without consulting the policy. Defaults to the

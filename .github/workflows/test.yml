@@ -1,0 +1,29 @@
+# Regression suite + lint + type check on every push/PR to main.
+name: Tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          version: "latest"
+          python-version: ${{ matrix.python-version }}
+      - name: Install (core + dev tooling + SDK adapter extra)
+        run: uv sync --extra dev --extra claude
+      - name: Ruff
+        run: uv run ruff check .
+      - name: Mypy
+        run: uv run mypy janus
+      - name: Pytest
+        run: uv run pytest -q

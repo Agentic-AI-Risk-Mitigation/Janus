@@ -64,11 +64,17 @@ def test_enforcer_importable_without_authzed(authzed_absent):
 
 
 def test_import_janus_does_not_import_pde_or_server(authzed_absent):
+    # Other test files may legitimately have imported server deps already
+    # (claude_agent_sdk pulls in mcp -> uvicorn), so assert on the *delta*:
+    # a fresh janus import must not ADD any of these to sys.modules.
+    pre = set(sys.modules)
+
     import janus  # noqa: F401
 
-    assert "authzed" not in sys.modules
-    assert "fastapi" not in sys.modules
-    assert "uvicorn" not in sys.modules
+    added = set(sys.modules) - pre
+    assert not {m for m in added if m == "authzed" or m.startswith("authzed.")}
+    assert not {m for m in added if m == "fastapi" or m.startswith("fastapi.")}
+    assert not {m for m in added if m == "uvicorn" or m.startswith("uvicorn.")}
 
 
 def test_pde_path_raises_actionable_importerror(authzed_absent):

@@ -31,6 +31,27 @@ from janus.policy.validator import validate_argument
 PolicyRule = tuple[int, int, dict, int]
 # Type alias for the full policy dict
 PolicyDict = dict[str, list[PolicyRule]]
+# Arguments that must be present and non-empty per tool: {tool_name: [arg, ...]}
+RequiredArgs = dict[str, list[str]]
+
+
+def check_required_args(tool_name: str, arguments: dict, required_args: RequiredArgs) -> None:
+    """
+    Require named arguments to be present and non-empty for a tool call.
+
+    Complements condition checking: a condition constrains an argument's
+    *value*, while this guards against the argument being omitted or blank
+    for tools whose policy has no condition on it (or only deny rules).
+    Raises ``PolicyViolation`` on a missing/blank argument.
+    """
+    for arg in required_args.get(tool_name, ()):
+        val = arguments.get(arg)
+        if val is None or (isinstance(val, str) and not val.strip()):
+            raise PolicyViolation(
+                tool_name=tool_name,
+                arguments=arguments,
+                reason=f"missing or empty required argument '{arg}'",
+            )
 
 
 class PolicyEnforcer:
@@ -48,9 +69,29 @@ class PolicyEnforcer:
     ``enforce()`` before executing any tool.
     """
 
-    def __init__(self, policy: PolicyDict | None = None):
+    def __init__(
+        self,
+        policy: PolicyDict | None = None,
+        *,
+        strict_conditions: bool = True,
+        required_args: RequiredArgs | None = None,
+    ):
+        """
+        Args:
+            policy: Optional initial policy in the internal format.
+            strict_conditions: If True (default), an allow rule whose condition
+                names an argument absent from the call does not match — the call
+                falls through to default-deny. Set False to restore the legacy
+                behavior of skipping conditions on absent arguments (unsafe: a
+                caller can bypass a restriction by omitting the argument).
+            required_args: ``{tool_name: [arg, ...]}`` — arguments that must be
+                present and non-empty for that tool, checked before rule
+                evaluation regardless of conditions.
+        """
         self._policy: PolicyDict | None = None
         self._logger = get_logger()
+        self._strict_conditions = strict_conditions
+        self._required_args: RequiredArgs = required_args or {}
 
         if policy is not None:
             self._policy = _sort_policy(policy)
@@ -177,6 +218,12 @@ class PolicyEnforcer:
         """
         self._logger.tool_call(tool_name, arguments)
 
+        try:
+            check_required_args(tool_name, arguments, self._required_args)
+        except PolicyViolation as exc:
+            self._logger.policy_decision(tool_name, allowed=False, reason=exc.reason)
+            raise
+
         if self._policy is None:
             self._logger.debug(
                 f"No policy loaded — allowing '{tool_name}' by default."
@@ -191,7 +238,7 @@ class PolicyEnforcer:
             raise PolicyViolation(tool_name=tool_name, arguments=arguments, reason=reason)
 
         try:
-            _evaluate_rules(tool_name, arguments, rules)
+            _evaluate_rules(tool_name, arguments, rules, strict=self._strict_conditions)
             self._logger.policy_decision(tool_name, allowed=True)
         except PolicyViolation as exc:
             self._logger.policy_decision(tool_name, allowed=False, reason=exc.reason)
@@ -207,12 +254,18 @@ def _evaluate_rules(
     tool_name: str,
     arguments: dict[str, Any],
     rules: list[PolicyRule],
+    *,
+    strict: bool = True,
 ) -> None:
     """
     Walk through policy rules in priority order and apply the first match.
 
-    Allow rules (effect=0): if all conditions pass → return (allow).
-    Deny rules (effect=1): if all conditions match → block.
+    Allow rules (effect=0): if all conditions pass → return (allow). Under
+    strict mode a condition on an absent argument fails the rule, so an allow
+    rule only vouches for calls that actually carry the arguments it
+    constrains.
+    Deny rules (effect=1): if all conditions match → block. A condition on an
+    absent argument matches vacuously, so deny rules fail closed.
     If no rule matches → block by default.
     """
     skipped_reasons: list[str] = []
@@ -222,7 +275,7 @@ def _evaluate_rules(
 
         if effect == 0:  # Allow rule
             try:
-                _check_conditions(arguments, conditions)
+                _check_conditions(arguments, conditions, require_present=strict)
                 return  # All conditions passed → allowed
             except ArgumentValidationError as exc:
                 skipped_reasons.append(f"Allow rule (priority={priority}) skipped: {exc.message}")
@@ -248,11 +301,34 @@ def _evaluate_rules(
     raise PolicyViolation(tool_name=tool_name, arguments=arguments, reason=reason)
 
 
-def _check_conditions(arguments: dict[str, Any], conditions: dict) -> None:
-    """Validate all conditions against the provided arguments."""
+def _check_conditions(
+    arguments: dict[str, Any],
+    conditions: dict,
+    *,
+    require_present: bool = False,
+) -> None:
+    """
+    Validate all conditions against the provided arguments.
+
+    With ``require_present`` (allow rules under strict mode), a condition on
+    an argument the call does not provide fails — omitting a restricted
+    argument must not satisfy the rule. Without it (deny rules, or legacy
+    mode), conditions on absent arguments are skipped, which for deny rules
+    means a vacuous match.
+    """
     for arg_name, restriction in conditions.items():
         if arg_name in arguments:
             validate_argument(arg_name, arguments[arg_name], restriction)
+        elif require_present:
+            raise ArgumentValidationError(
+                argument_name=arg_name,
+                value=None,
+                restriction=restriction,
+                message=(
+                    f"Argument '{arg_name}' is restricted by this rule "
+                    "but was not provided in the call."
+                ),
+            )
 
 
 def _handle_block(
@@ -294,7 +370,9 @@ def _handle_block(
 
 
 def _sort_policy(policy: PolicyDict) -> PolicyDict:
-    """Sort each tool's rules by (priority, -effect) so allow rules precede deny at the same level."""
+    """Sort each tool's rules by (priority, -effect) so deny rules precede allow
+    at the same priority — a fail-closed tie-break, and what lets block_tools()
+    override an allow_tools() grant (both insert at priority 1)."""
     return {
         tool: sorted(rules, key=lambda r: (r[0], -r[1]))
         for tool, rules in policy.items()

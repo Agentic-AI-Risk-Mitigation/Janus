@@ -585,7 +585,8 @@ options = ClaudeAgentOptions(
     allowed_tools=["mcp__research__web_search", "mcp__research__fetch_page"],
     permission_mode="dontAsk",
     output_format={"type": "json_schema", "schema": SCHEMA},
-    # required_args closes Janus's absent-argument bypass (present + non-empty).
+    # required_args: belt-and-braces presence check (non-empty) on top of the
+    # core enforcer's strict condition semantics.
     hooks=janus_hooks(TOOL_POLICY, required_args={"fetch_page": ["url"]}),
 )
 ```

@@ -18,7 +18,7 @@ uv sync --extra all --extra dev  # Full demo/provider stack + dev
 ./scripts/run_demo_webapp.sh --with-spicedb                   # Web demo UI + SpiceDB for PDE scenarios
 uv run python -m examples.run --list                         # Example scenarios (requires LangChain extra)
 uv run python -m examples.run coding_agent_poisoned_readme --protected
-uv run pytest                                                # Optional: only meaningful when tests/ is present
+uv run pytest                                                # Run the regression suite in tests/
 
 # Lint & Format
 uv run ruff check .              # Lint
@@ -34,7 +34,7 @@ uv run python -m examples.run coding_agent_poisoned_readme --protected    # CLI 
 uv run uvicorn examples.app:app --reload                           # Web demo UI
 ```
 
-Note: the current `main` branch does not include the historical `tests/` tree, so `uv run pytest` currently collects 0 tests unless that tree is present in your checkout.
+The `tests/` tree covers the standalone-enforcer packaging contract, enforcer rule-evaluation semantics, the Claude Agent SDK adapter seams, and replay-style indirect-prompt-injection scenarios (`test_ipi_scenarios.py`). All tests run offline — no LLM or SpiceDB needed.
 
 ## Architecture
 
@@ -55,7 +55,7 @@ When a tool is blocked, the `PolicyViolation` is caught and returned as a string
 ### Key Design Decisions
 
 - **Single canonical tool representation**: Tools are defined once as `ToolDef`/`ToolParam` and converted to provider-specific schemas via `.to_openai_schema()`, `.to_pydantic_model()`, etc.
-- **Default-deny when policy loaded**: Tools not listed in a loaded policy are blocked. Unlisted arguments in conditions are skipped (known issue).
+- **Default-deny when policy loaded**: Tools not listed in a loaded policy are blocked. Conditions fail closed on missing arguments (`strict_conditions=True` default): an allow rule conditioning an absent argument does not match, and a per-tool `required_args` option rejects absent/blank arguments outright.
 - **No global state**: Every enforcer, registry, and runner is independent and safe for concurrent use.
 - **Priority ordering**: Lower priority values evaluate first. Convention: manual rules 1–10, LLM-generated rules 100+.
 
@@ -63,7 +63,7 @@ When a tool is blocked, the `PolicyViolation` is caught and returned as a string
 
 `janus/adapters/langchain.py` and `janus/adapters/adk.py` wrap framework-native tool execution with Janus enforcement. The shared base (`janus/adapters/_base.py`) provides `resolve_enforcer()` and `make_guarded_handler()`.
 
-`janus/adapters/claude_agent_sdk.py` integrates with the Claude Agent SDK (Claude Code), whose tool loop runs inside the `claude` CLI subprocess. It enforces at the SDK's pre-execution seams rather than in the call path: `janus_pretooluse_hook()`/`janus_hooks()` (the robust seam — fires for every call, even allow-listed ones), `make_can_use_tool()` (bypassable by `allowed_tools`/`bypassPermissions` shadowing — documented as such), and `guard_tool_body()` (belt-and-braces). The adapter strips the `mcp__<server>__` tool-name prefix before matching the policy, passes the SDK-internal `StructuredOutput` tool through, and backstops the missing-argument bypass via `required_args`. Behind the `claude` extra.
+`janus/adapters/claude_agent_sdk.py` integrates with the Claude Agent SDK (Claude Code), whose tool loop runs inside the `claude` CLI subprocess. It enforces at the SDK's pre-execution seams rather than in the call path: `janus_pretooluse_hook()`/`janus_hooks()` (the robust seam — fires for every call, even allow-listed ones), `make_can_use_tool()` (bypassable by `allowed_tools`/`bypassPermissions` shadowing — documented as such), and `guard_tool_body()` (belt-and-braces). The adapter strips the `mcp__<server>__` tool-name prefix before matching the policy, passes the SDK-internal `StructuredOutput` tool through, and supports a per-call `required_args` presence check (delegating to the core `check_required_args`). Behind the `claude` extra.
 
 ## Ruff Config
 
@@ -72,7 +72,8 @@ Line length 100, target Python 3.11, rules: E, F, I, UP. E501 ignored.
 ## Known Issues
 
 Current high-signal issues:
-- Missing argument bypass in `enforcer.py` — if LLM omits a restricted argument, the condition is skipped. The Claude Agent SDK adapter works around this per-call via its `required_args` backstop, but the core `enforcer.py` gap is unfixed
 - Broad exception catching in `runner.py` — all exceptions become error strings
 - Hardcoded SpiceDB token defaults in `pde_enforcer.py` and `janus/policy/pde/`
-- The current `main` branch does not include a checked-in `tests/` tree, so regression coverage is missing from this checkout
+- PDE taint updates are manual (`agent.update_taint()`) and session-scalar — automatic per-source taint derivation is planned (Phase 1 of the IPI roadmap)
+
+Fixed (0.0.6): the missing-argument bypass in `enforcer.py` — conditions now fail closed on absent arguments (`strict_conditions=True` default) and core `required_args` rejects absent/blank arguments; the Claude Agent SDK adapter delegates to the core check.
