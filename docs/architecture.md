@@ -21,7 +21,7 @@ Janus sits between the LLM agent and its tools. Every tool call is intercepted, 
 | **Lakera Guard, NeMo Guardrails** | Input/output content filtering | They filter text. Janus enforces at tool execution. A blocked prompt does not stop a tool call; a blocked tool call does. |
 | **IronCurtain** | Natural-language policies via MCP | Janus uses machine-readable JSON Schema; deterministic evaluation; no reliance on NL interpretation. |
 | **Protect AI, Robust Intelligence** | Pre-deployment scanning, red-teaming | Janus is runtime enforcement. It does not scan; it intercepts every call. |
-| **Progent** | Academic prototype; privilege control | Janus is a production implementation with LangChain/ADK adapters, LLM policy generation, and optional SpiceDB/taint. |
+| **Progent** | Academic prototype; privilege control | Janus is a production implementation with LangChain/ADK/Claude Agent SDK adapters, LLM policy generation, and optional SpiceDB/taint. |
 
 ## Enforcement Flow
 
@@ -104,7 +104,9 @@ janus/
 │   └── builtin/
 ├── adapters/
 │   ├── langchain.py
-│   └── adk.py
+│   ├── adk.py
+│   └── claude_agent_sdk.py
+
 examples/                  # Demo scenario framework + web app
 ├── shared/                # Events, mock tools, scripted LLM, scenario runner
 ├── scenarios/             # ecommerce_ipi, coding_agent_poisoned_readme, coding_agent_taint_cascade, ...

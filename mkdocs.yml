@@ -25,4 +25,5 @@ nav:
   - Demo: demo.md
   - Policy Reference: policy-reference.md
   - Architecture: architecture.md
+  - Adapters: adapters.md
   - SpiceDB Enforcement: spicedb-enforcement.md

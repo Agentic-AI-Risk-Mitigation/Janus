@@ -21,6 +21,7 @@ uv add "janus-guard[anthropic]"   # Anthropic Claude
 uv add "janus-guard[google]"      # Google Gemini
 uv add "janus-guard[langchain]"   # LangChain adapter
 uv add "janus-guard[adk]"         # Google ADK adapter
+uv add "janus-guard[claude]"      # Claude Agent SDK (Claude Code) adapter
 uv add "janus-guard[all]"         # Everything
 ```
 

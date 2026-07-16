@@ -42,6 +42,10 @@ Janus intercepts every tool call an LLM agent makes and validates it against a s
     - [Google ADK (Gemini)](#google-adk-gemini)
       - [Depth 1 — Convert `ToolDef` list to ADK-native types](#depth-1--convert-tooldef-list-to-adk-native-types)
       - [Depth 2 — `JanusADKAgent` (turnkey)](#depth-2--janusadkagent-turnkey)
+    - [Claude Agent SDK (Claude Code)](#claude-agent-sdk-claude-code)
+      - [Primary seam — `PreToolUse` hook](#primary-seam--pretooluse-hook)
+      - [Alternative seam — `can_use_tool` callback](#alternative-seam--can_use_tool-callback)
+      - [Belt-and-braces — `guard_tool_body()`](#belt-and-braces--guard_tool_body)
   - [Standalone Policy Enforcement](#standalone-policy-enforcement)
   - [Runtime Policy Management](#runtime-policy-management)
   - [Error Handling](#error-handling)
@@ -61,7 +65,7 @@ Janus intercepts every tool call an LLM agent makes and validates it against a s
 - **Built-in tools** — ready-to-use file system and command execution tools with workspace sandboxing
 - **Custom tools** — define your own tools with `ToolDef` / `ToolParam`; Janus guards them automatically
 - **10+ LLM providers** — OpenAI, Anthropic, Google Gemini, Azure OpenAI, AWS Bedrock, Ollama, vLLM, Together AI, OpenRouter
-- **Framework adapters** — plug Janus enforcement into LangChain and Google ADK agents
+- **Framework adapters** — plug Janus enforcement into LangChain, Google ADK, and Claude Agent SDK (Claude Code) agents
 - **Standalone enforcer** — use `PolicyEnforcer` independently in any agentic framework
 - **Three fallback actions** — raise `PolicyViolation`, call `sys.exit`, or prompt the user interactively
 - **Workspace isolation** — file tools are scoped to a directory; path-traversal attempts are rejected
@@ -92,6 +96,7 @@ uv add "janus-guard[google]"      # Google Gemini
 uv add "janus-guard[bedrock]"     # AWS Bedrock
 uv add "janus-guard[langchain]"   # LangChain adapter
 uv add "janus-guard[adk]"         # Google ADK adapter
+uv add "janus-guard[claude]"      # Claude Agent SDK (Claude Code) adapter
 uv add "janus-guard[all]"         # Everything
 ```
 
@@ -551,6 +556,60 @@ response = agent.run("What Python files are in the workspace?")
 agent.clear_history()
 ```
 
+### Claude Agent SDK (Claude Code)
+
+The [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-python) (`claude-agent-sdk`) runs the tool loop inside the `claude` CLI subprocess, so Janus cannot sit in the call path the way it does when it owns the loop. Instead the adapter plugs a `PolicyEnforcer` into the SDK's pre-execution seams, so a policy decision still runs *before* a tool executes.
+
+**Install** (also needs the `claude` CLI on `PATH`):
+
+```bash
+uv add "janus-guard[claude]"
+```
+
+#### Primary seam — `PreToolUse` hook
+
+Use `janus_hooks()` to get a ready `hooks=` dict for `ClaudeAgentOptions`. A `PreToolUse` hook fires for **every** tool call, even ones in `allowed_tools` and under `permission_mode="dontAsk"` — so the policy cannot be bypassed:
+
+```python
+from claude_agent_sdk import ClaudeAgentOptions, query, create_sdk_mcp_server
+from janus.adapters.claude_agent_sdk import janus_hooks
+
+# Policy keyed on bare tool names; the adapter strips the mcp__<server>__ prefix.
+TOOL_POLICY = {
+    "web_search": [(1, 0, {"query": {"type": "string", "maxLength": 400}}, 0)],
+    "fetch_page": [(1, 0, {"url": my_ssrf_check}, 0)],   # callable condition
+}
+
+options = ClaudeAgentOptions(
+    mcp_servers={"research": create_sdk_mcp_server(name="research", tools=[...])},
+    allowed_tools=["mcp__research__web_search", "mcp__research__fetch_page"],
+    permission_mode="dontAsk",
+    output_format={"type": "json_schema", "schema": SCHEMA},
+    # required_args closes Janus's absent-argument bypass (present + non-empty).
+    hooks=janus_hooks(TOOL_POLICY, required_args={"fetch_page": ["url"]}),
+)
+```
+
+On a policy block the hook returns a `permissionDecision: "deny"` whose reason is fed back to the model, so the agent can adjust rather than crash. Two SDK-specific behaviours the adapter handles for you:
+
+- **`StructuredOutput` passthrough** — when you set `output_format`, the SDK delivers the final result via an internal `StructuredOutput` tool call the hook also sees. A default-deny policy would block it and null the result. Such SDK-internal tools are passed through (configurable via `passthrough_tools`).
+- **Name mapping** — an in-process `@tool("fetch", …)` on a server named `research` is invoked as `mcp__research__fetch`. The adapter maps it back to the bare policy key (`fetch`). Pass `resolve_name=lambda n: n` if your policy uses the full prefixed names.
+
+#### Alternative seam — `can_use_tool` callback
+
+`make_can_use_tool()` builds a `can_use_tool` callback. **It is bypassable**: the SDK auto-approves any whole-tool `allowed_tools` entry (and everything under `permission_mode="bypassPermissions"`) *before* the callback runs, and emits a `CanUseToolShadowedWarning`. Prefer the hook; use the callback only when nothing shadows it.
+
+#### Belt-and-braces — `guard_tool_body()`
+
+Wrap an in-process `@tool` body so enforcement also runs at execution time, independent of any SDK permission seam:
+
+```python
+from janus.adapters.claude_agent_sdk import guard_tool_body
+
+guarded = guard_tool_body("fetch_page", my_async_body, TOOL_POLICY,
+                          required_args={"fetch_page": ["url"]})
+```
+
 ---
 
 ## Standalone Policy Enforcement
@@ -679,7 +738,8 @@ janus/
 └── adapters/
     ├── _base.py              # Shared adapter utilities
     ├── langchain.py          # LangChain integration
-    └── adk.py                # Google ADK (Gemini) integration
+    ├── adk.py                # Google ADK (Gemini) integration
+    └── claude_agent_sdk.py   # Claude Agent SDK (Claude Code) integration
 
 examples/                     # Demo scenario framework + FastAPI web app + docker-compose.yml for SpiceDB
 ```

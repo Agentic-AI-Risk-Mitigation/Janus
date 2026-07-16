@@ -63,6 +63,8 @@ When a tool is blocked, the `PolicyViolation` is caught and returned as a string
 
 `janus/adapters/langchain.py` and `janus/adapters/adk.py` wrap framework-native tool execution with Janus enforcement. The shared base (`janus/adapters/_base.py`) provides `resolve_enforcer()` and `make_guarded_handler()`.
 
+`janus/adapters/claude_agent_sdk.py` integrates with the Claude Agent SDK (Claude Code), whose tool loop runs inside the `claude` CLI subprocess. It enforces at the SDK's pre-execution seams rather than in the call path: `janus_pretooluse_hook()`/`janus_hooks()` (the robust seam — fires for every call, even allow-listed ones), `make_can_use_tool()` (bypassable by `allowed_tools`/`bypassPermissions` shadowing — documented as such), and `guard_tool_body()` (belt-and-braces). The adapter strips the `mcp__<server>__` tool-name prefix before matching the policy, passes the SDK-internal `StructuredOutput` tool through, and backstops the missing-argument bypass via `required_args`. Behind the `claude` extra.
+
 ## Ruff Config
 
 Line length 100, target Python 3.11, rules: E, F, I, UP. E501 ignored.
@@ -70,7 +72,7 @@ Line length 100, target Python 3.11, rules: E, F, I, UP. E501 ignored.
 ## Known Issues
 
 Current high-signal issues:
-- Missing argument bypass in `enforcer.py` — if LLM omits a restricted argument, the condition is skipped
+- Missing argument bypass in `enforcer.py` — if LLM omits a restricted argument, the condition is skipped. The Claude Agent SDK adapter works around this per-call via its `required_args` backstop, but the core `enforcer.py` gap is unfixed
 - Broad exception catching in `runner.py` — all exceptions become error strings
 - Hardcoded SpiceDB token defaults in `pde_enforcer.py` and `janus/policy/pde/`
 - The current `main` branch does not include a checked-in `tests/` tree, so regression coverage is missing from this checkout

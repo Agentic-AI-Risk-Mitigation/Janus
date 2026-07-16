@@ -87,6 +87,21 @@ python -m examples.run banking_traces --protected           # Banking policy tra
 python -m examples.run fintech_planning --protected         # Iterative planning with guardrails
 ```
 
+## Live Claude Agent SDK demo
+
+The scripted scenarios above use a mock LLM. `claude_agent_sdk_demo.py` is a **live** example
+that drives the real `claude` CLI via the Claude Agent SDK, with a Janus policy enforced at the
+SDK's `PreToolUse` hook seam. It shows an allowed call succeeding and both an SSRF-blocked URL
+and an unlisted tool being denied before their bodies run. Needs `janus-guard[claude]` (the
+`claude` CLI on PATH) and `CLAUDE_CODE_OAUTH_TOKEN` (or `ANTHROPIC_API_KEY`):
+
+```bash
+uv add "janus-guard[claude]"
+uv run python -m examples.claude_agent_sdk_demo
+```
+
+See [`docs/adapters.md`](../docs/adapters.md) for the adapter reference.
+
 ## Developer Walkthrough
 
 For a step-by-step live-coding guide that shows how to create an agent,
