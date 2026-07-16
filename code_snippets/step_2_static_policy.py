@@ -1,7 +1,5 @@
-from janus import JanusAgent
-
 from code_snippets.step_0_define_healthcare_tools import healthcare_tools
-
+from janus import JanusAgent
 
 healthcare_policy = {
     "query_patient_record": [
