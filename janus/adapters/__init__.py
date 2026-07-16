@@ -20,6 +20,14 @@ adk
     - ``secure_adk_tools(tools, policy)``  — ToolDef → (declarations, handlers)
     - ``JanusADKAgent``                    — turnkey Gemini agent
 
+claude_agent_sdk
+    ``from janus.adapters.claude_agent_sdk import janus_pretooluse_hook, janus_hooks``
+
+    - ``janus_pretooluse_hook(policy, …)`` — PreToolUse hook (the robust seam)
+    - ``janus_hooks(policy, …)``           — ready ``hooks=`` dict for ClaudeAgentOptions
+    - ``make_can_use_tool(policy, …)``     — can_use_tool callback (bypassable; see warning)
+    - ``guard_tool_body(name, body, policy, …)`` — belt-and-braces @tool wrapper
+
 Adding new adapters
 -------------------
 Create ``janus/adapters/<framework>.py`` exposing at minimum:

@@ -40,6 +40,9 @@ server    = ["fastapi>=0.135.1", "uvicorn[standard]>=0.41.0"]
 anthropic = ["anthropic>=0.25"]
 google    = ["google-genai>=1.0"]
 bedrock   = ["boto3>=1.26"]
+# Claude Agent SDK adapter (janus.adapters.claude_agent_sdk). Enforces a policy
+# at the SDK's PreToolUse hook / can_use_tool seams. Needs the `claude` CLI too.
+claude    = ["claude-agent-sdk>=0.2"]
 langchain = [
     "langchain>=0.3",
     "langchain-core>=0.3",
@@ -53,6 +56,7 @@ all       = [
     "anthropic>=0.25",
     "google-genai>=1.0",
     "boto3>=1.26",
+    "claude-agent-sdk>=0.2",
     "langchain>=0.3",
     "langchain-core>=0.3",
     "langchain-openai>=0.2",
@@ -63,6 +67,7 @@ dev = [
     "authzed>=1.24.3",
     "fastapi>=0.135.1",
     "uvicorn[standard]>=0.41.0",
+    "claude-agent-sdk>=0.2",
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
     "ruff>=0.4",
