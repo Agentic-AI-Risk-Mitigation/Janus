@@ -212,3 +212,4 @@ __marimo__/
 
 # User-Agent Interaction notes
 *.notes
+tests/smoke/last_run.json

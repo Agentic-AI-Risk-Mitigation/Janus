@@ -82,11 +82,15 @@ DEFAULT_PASSTHROUGH_TOOLS = frozenset({"StructuredOutput"})
 # Built-in Claude Code tools that janus_options() denies explicitly. ``tools=[]``
 # already removes them at session start; listing them in ``disallowed_tools`` is
 # defense in depth should the ``tools`` field's semantics ever shift upstream.
-# ``Task`` is denied deliberately: whether PreToolUse fires for tool calls made
-# *inside* a subagent is unverified on the pinned SDK version, so subagents stay
-# off until a live smoke test proves the hook covers them.
+# ``Task`` (invoked as ``Agent`` on current CLIs — both names are denied) is
+# excluded deliberately: even though the live smoke suite verified (SDK 0.2.120
+# + CLI 2.1.218) that PreToolUse fires for tool calls inside a subagent,
+# enabling it also exposes every filesystem-defined agent (``~/.claude``
+# agents load regardless of ``setting_sources``), so subagents stay opt-in via
+# an explicit ``unsafe_overrides=True`` tools override.
 DEFAULT_DISALLOWED_TOOLS: tuple[str, ...] = (
     "Task",
+    "Agent",
     "Bash",
     "BashOutput",
     "KillShell",

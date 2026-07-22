@@ -19,6 +19,7 @@ uv sync --extra all --extra dev  # Full demo/provider stack + dev
 uv run python -m examples.run --list                         # Example scenarios (requires LangChain extra)
 uv run python -m examples.run coding_agent_poisoned_readme --protected
 uv run pytest                                                # Run the regression suite in tests/
+JANUS_LIVE_SMOKE=1 uv run pytest tests/smoke/ -v -s          # Live SDK smoke suite (real CLI + tokens; add JANUS_SMOKE_SLOW=1 for the hook-timeout experiment)
 
 # Lint & Format
 uv run ruff check .              # Lint
@@ -34,7 +35,7 @@ uv run python -m examples.run coding_agent_poisoned_readme --protected    # CLI 
 uv run uvicorn examples.app:app --reload                           # Web demo UI
 ```
 
-The `tests/` tree covers the standalone-enforcer packaging contract, enforcer rule-evaluation semantics, the Claude Agent SDK adapter seams, and replay-style indirect-prompt-injection scenarios (`test_ipi_scenarios.py`). All tests run offline — no LLM or SpiceDB needed.
+The `tests/` tree covers the standalone-enforcer packaging contract, enforcer rule-evaluation semantics, the Claude Agent SDK adapter seams, and replay-style indirect-prompt-injection scenarios (`test_ipi_scenarios.py`). All tests run offline — no LLM or SpiceDB needed — except `tests/smoke/`, the live SDK smoke suite (skipped unless `JANUS_LIVE_SMOKE=1`), which verifies the SDK/CLI-side semantics `janus_options()` depends on against pinned versions; verified runs are recorded in `plans/claude-agent-sdk-hardening.md`.
 
 ## Architecture
 

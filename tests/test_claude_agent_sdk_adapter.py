@@ -257,6 +257,7 @@ def test_janus_options_lockdown_fields():
     assert opts.permission_mode == "dontAsk"
     assert opts.setting_sources is None                 # SDK default: no filesystem settings
     assert "Task" in opts.disallowed_tools
+    assert "Agent" in opts.disallowed_tools  # Task's runtime name on CLI >= 2.1.x
     assert set(DEFAULT_DISALLOWED_TOOLS) <= set(opts.disallowed_tools)
     assert opts.hooks and "PreToolUse" in opts.hooks
     assert "PostToolUse" not in opts.hooks              # no taint tracker passed

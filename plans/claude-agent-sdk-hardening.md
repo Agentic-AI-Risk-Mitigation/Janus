@@ -192,35 +192,47 @@ server segment isn't in the known set (resolves to a never-allowed sentinel, or
 raises → deny via the fail-closed wrapper). Default it inside
 `janus_options()`, where the server set is known.
 
-### 5. Pinned-version live smoke test
+### 5. Pinned-version live smoke test — **DONE (tests/smoke/, 2026-07-23)**
 
 **Problem:** offline tests verify Janus's side of the contract, not the SDK's.
 Hook behavior regressed upstream before (Claude Code 2.0.30/2.0.31); the
 0.2.120 field semantics above could also shift.
 
-**Proposal:** a small live suite (manual / nightly, excluded from the offline
-default run) against pinned SDK + CLI versions asserting:
+**Implemented:** `tests/smoke/test_live_sdk_semantics.py` — excluded from the
+offline default run (skipped unless `JANUS_LIVE_SMOKE=1`), asserting the five
+contract facts and recording the follow-up 6 experiments. Run with:
 
-- PreToolUse fires for every call (in-process MCP, allow-listed, `dontAsk`);
-- `tools=[]` really removes built-ins (ask the agent to run `Bash` — it must
-  not exist);
-- `strict_mcp_config=True` really ignores a planted `.mcp.json`;
-- deny path holds in multi-turn / continued sessions;
-- `StructuredOutput` passthrough still works;
-- the follow-up 6 experiments below.
+```bash
+JANUS_LIVE_SMOKE=1 JANUS_SMOKE_SLOW=1 uv run python -m pytest tests/smoke/ -v -s
+```
 
-Record the verified SDK+CLI version pair here and in the integration memory
-note on every run.
+Findings summary lands in `tests/smoke/last_run.json` (gitignored) and stdout.
 
-### 6. Unverified SDK semantics (experiments for the smoke suite)
+#### Verified runs
 
-- **Subagent tool calls:** does PreToolUse fire inside a `Task`/subagent spawn?
-  Until proven, `janus_options()` keeps `Task` in `disallowed_tools`; if the
-  answer is yes on the pinned version, make subagents opt-in.
-- **Hook timeout:** if the Janus hook is slow (future SpiceDB-backed check),
-  does the CLI time out and proceed (fail open)? Related to
-  claude-agent-sdk-python #304. If it fails open, document a hard latency
-  budget for hook-side checks.
-- **PostToolUse reliability:** taint derivation and the follow-up 2 cross-check
-  inherit hook-firing risk — if PostToolUse skips, the session under-taints and
-  the Rule-of-Two gate silently weakens.
+| Date | SDK | CLI | Result |
+|---|---|---|---|
+| 2026-07-23 | 0.2.120 | 2.1.218 | 7/7 pass — all five contract facts VERIFIED; experiments: subagent COVERED, hook timeout FAILS CLOSED |
+
+### 6. Unverified SDK semantics — **ANSWERED on 0.2.120 + CLI 2.1.218 (2026-07-23)**
+
+- **Subagent tool calls: COVERED.** PreToolUse fires for tool calls made
+  inside a `Task` subagent (observed via `parent_tool_use_id`-tagged
+  assistant messages; the inner call hit the hook). Two caveats discovered:
+  1. the spawn tool is invoked as **`Agent`**, not `Task`, on CLI 2.1.218 —
+     `DEFAULT_DISALLOWED_TOOLS` now denies both names;
+  2. enabling it exposed **49 filesystem-defined agents** (`~/.claude`
+     agents load regardless of `setting_sources`), each with its own tool
+     grants. Because of (2), subagents stay excluded from the lockdown by
+     default even though hook coverage is proven; opt-in requires
+     `unsafe_overrides=True` and should pin an explicit `agents=` dict.
+- **Hook timeout: FAILS CLOSED.** A PreToolUse hook that exceeded its
+  `HookMatcher(timeout=10)` blocked the call — the tool body never ran.
+  Slow hook-side checks (future SpiceDB-backed) are therefore a liveness
+  concern, not a fail-open hazard, on the pinned pair. Re-verify on version
+  bumps (claude-agent-sdk-python #304 reported the opposite on older
+  versions).
+- **PostToolUse reliability: VERIFIED** for every executed call on the pinned
+  pair (asserted in the same run as PreToolUse coverage). The follow-up 2
+  cross-check remains worthwhile as a runtime detector for future
+  regressions the nightly suite hasn't caught yet.
