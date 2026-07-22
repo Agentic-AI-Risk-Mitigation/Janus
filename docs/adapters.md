@@ -27,6 +27,71 @@ so the adapter enforces at the SDK's pre-execution seams instead.
 uv add "janus-guard[claude]"   # also requires the `claude` CLI on PATH
 ```
 
+### Recommended entry point — `janus_options()`
+
+The hook seam alone leaves tool-level reachability hostage to the hook firing: upstream
+Claude Code releases have shipped regressions where `PreToolUse` hooks silently did not run,
+and a skipped hook then executes `Bash(<anything>)`. `janus_options()` generates a locked-down
+`ClaudeAgentOptions` in which each layer answers a different question and fails differently:
+
+| Layer | Question | Failure mode |
+|---|---|---|
+| `tools=[]` + `strict_mcp_config=True` | does the tool *exist*? | CLI-enforced at session start — nothing for a hook to miss |
+| `allowed_tools` ∩ policy + `dontAsk` | may it run *unprompted*? | whole-tool granularity only |
+| PreToolUse hook (Janus) | may it run *with these arguments*? | depends on hook firing |
+| `guard_tool_body` | runs even if all the above lied | in-process tools only |
+
+Locked down, a skipped hook's worst case shrinks from arbitrary `Bash` to *a policy-listed
+Janus tool running with arguments the policy would have refused* — bounded to your own tool
+surface.
+
+```python
+from claude_agent_sdk import create_sdk_mcp_server
+from janus.adapters.claude_agent_sdk import janus_options
+
+options = janus_options(
+    TOOL_POLICY,
+    mcp_servers={"research": create_sdk_mcp_server(name="research", tools=[...])},
+    required_args={"fetch_page": ["url"]},
+    output_format={"type": "json_schema", "schema": SCHEMA},   # extra kwargs forwarded
+)
+```
+
+What it generates:
+
+- **`tools=[]`** — built-ins (`Bash`/`Write`/`Edit`/…) don't exist in the session, and
+  **`disallowed_tools`** re-denies them (plus `Task`: subagents stay off until `PreToolUse`
+  coverage inside them is verified) as defense in depth.
+- **`strict_mcp_config=True`** — only the `mcp_servers` you pass exist; `~/.claude.json`,
+  `.mcp.json` and project config are ignored. `setting_sources` stays at the SDK default
+  (none), so filesystem settings cannot re-enable anything.
+- **`allowed_tools` = policy ∩ mounted** — tool names are enumerated from the in-process
+  servers and kept only if the policy has a rule for them; mounted tools the policy doesn't
+  know are unreachable, not silently allowed. External (stdio/SSE/HTTP) servers can't be
+  enumerated and require an explicit `allowed_tools=` merge (still policy-filtered).
+- **`permission_mode="dontAsk"`** — anything not allow-listed is denied, not prompted.
+- **`hooks=janus_hooks(...)`** — the argument-level seam, wired with the same knobs
+  (`required_args`, `taint`, `resolve_name`, `passthrough_tools`).
+
+Two extra knobs:
+
+- **`hook_approved_tools={"send_email"}`** — high-risk sinks kept *off* `allowed_tools` even
+  though mounted and policy-listed. The Janus hook approves them explicitly on allow, so under
+  `dontAsk` the permission layer and the hook must **both** agree before a sink runs — if the
+  hook is skipped, the sink is denied rather than silently allowed.
+- **`extra_hooks=`** — merge your own hook matchers alongside the Janus wiring (appended after
+  ours per event).
+
+Weakening the lockdown is loud: forwarding `tools`, `strict_mcp_config=False`,
+`permission_mode="bypassPermissions"`/`"acceptEdits"`, `can_use_tool`, `setting_sources`, or
+`hooks` raises `ValueError` unless you pass `unsafe_overrides=True`. `allowed_tools` /
+`disallowed_tools` overrides are merged, not replaced — additions can only shrink the
+reachable surface, never grow it. Unexpected exceptions inside the Janus hook itself
+(enforcer bug, malformed input) return a **deny**, so Janus's own defects fail closed.
+
+The hook-only path below remains the documented integration for sessions that must retain
+built-in tools.
+
 ### Primary seam — `PreToolUse` hook
 
 A `PreToolUse` hook fires for **every** tool call, even those in `allowed_tools` and under

@@ -13,8 +13,10 @@ import asyncio
 import pytest
 
 from janus.adapters.claude_agent_sdk import (
+    DEFAULT_DISALLOWED_TOOLS,
     default_resolve_name,
     guard_tool_body,
+    janus_options,
     janus_pretooluse_hook,
     make_can_use_tool,
 )
@@ -178,6 +180,196 @@ def test_guard_tool_body_missing_arg_backstop():
     guarded = guard_tool_body("fetch_page", body, POLICY, required_args=REQUIRED)
     out = asyncio.run(guarded({}))  # no url
     assert out.get("isError") is True
+
+
+# --- fail closed on Janus's own defects ------------------------------------------
+
+
+def test_hook_denies_on_unexpected_exception():
+    # A raising resolve_name stands in for any internal enforcement bug
+    # (malformed tool_input, enforcer defect, taint defect). The hook must
+    # deny, not error-and-proceed (which the CLI treats as fail-open).
+    def broken(name: str) -> str:
+        raise RuntimeError("resolver bug")
+
+    hook = janus_pretooluse_hook(POLICY, resolve_name=broken)
+    out = _run_hook(hook, "mcp__research__web_search", {"query": "hi"})
+    assert _denied(out)
+    assert "failing closed" in out["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_can_use_tool_denies_on_unexpected_exception():
+    pytest.importorskip("claude_agent_sdk")
+    from claude_agent_sdk import PermissionResultDeny
+
+    def broken(name: str) -> str:
+        raise RuntimeError("resolver bug")
+
+    cb = make_can_use_tool(POLICY, resolve_name=broken)
+    out = asyncio.run(cb("mcp__research__web_search", {"query": "hi"}, None))
+    assert isinstance(out, PermissionResultDeny)
+    assert "failing closed" in out.message
+
+
+# --- hook-approved sinks: explicit allow decision --------------------------------
+
+
+def test_hook_approved_tool_gets_explicit_allow():
+    hook = janus_pretooluse_hook(POLICY, hook_approved_tools={"web_search"})
+    out = _run_hook(hook, "mcp__research__web_search", {"query": "hi"})
+    hso = out.get("hookSpecificOutput") or {}
+    assert hso.get("permissionDecision") == "allow"
+    # Non-approved tools keep the neutral {} (permission layer decides)
+    hook2 = janus_pretooluse_hook(POLICY, hook_approved_tools={"web_search"})
+    assert _run_hook(hook2, "mcp__research__fetch_page", {"url": "https://a.example/"}) == {}
+    # Deny still denies
+    assert _denied(_run_hook(hook, "mcp__research__web_search", {"query": "x" * 500}))
+
+
+# --- janus_options(): the locked-down options builder (SDK required) -------------
+
+
+def _make_server():
+    pytest.importorskip("claude_agent_sdk")
+    from claude_agent_sdk import create_sdk_mcp_server, tool
+
+    @tool("web_search", "Search the web", {"query": str})
+    async def web_search(args):
+        return {"content": []}
+
+    @tool("fetch_page", "Fetch a page", {"url": str})
+    async def fetch_page(args):
+        return {"content": []}
+
+    @tool("read_secret", "Read a secret", {})
+    async def read_secret(args):
+        return {"content": []}
+
+    return create_sdk_mcp_server("research", tools=[web_search, fetch_page, read_secret])
+
+
+def test_janus_options_lockdown_fields():
+    server = _make_server()
+    opts = janus_options(POLICY, mcp_servers={"research": server})
+
+    assert opts.tools == []
+    assert opts.strict_mcp_config is True
+    assert opts.permission_mode == "dontAsk"
+    assert opts.setting_sources is None                 # SDK default: no filesystem settings
+    assert "Task" in opts.disallowed_tools
+    assert set(DEFAULT_DISALLOWED_TOOLS) <= set(opts.disallowed_tools)
+    assert opts.hooks and "PreToolUse" in opts.hooks
+    assert "PostToolUse" not in opts.hooks              # no taint tracker passed
+
+
+def test_janus_options_wires_posttooluse_with_taint():
+    from janus.policy.taint import TaintTracker
+
+    server = _make_server()
+    tracker = TaintTracker(sources={"fetch_page": "web"}, gates={"web_search": "*"})
+    opts = janus_options(POLICY, mcp_servers={"research": server}, taint=tracker)
+    assert "PostToolUse" in opts.hooks
+
+
+def test_janus_options_allowed_is_policy_intersect_mounted():
+    server = _make_server()
+    opts = janus_options(POLICY, mcp_servers={"research": server})
+    # read_secret is mounted but unknown to the policy -> unreachable
+    assert sorted(opts.allowed_tools) == [
+        "mcp__research__fetch_page",
+        "mcp__research__web_search",
+    ]
+
+
+def test_janus_options_hook_approved_kept_off_allowed_tools():
+    server = _make_server()
+    opts = janus_options(
+        POLICY, mcp_servers={"research": server}, hook_approved_tools={"fetch_page"}
+    )
+    assert opts.allowed_tools == ["mcp__research__web_search"]
+    # Unknown-to-policy hook_approved entries could never be approved -> loud error
+    with pytest.raises(ValueError, match="hook_approved_tools"):
+        janus_options(
+            POLICY, mcp_servers={"research": server}, hook_approved_tools={"nope"}
+        )
+
+
+@pytest.mark.parametrize("override", [
+    {"tools": ["Bash"]},
+    {"strict_mcp_config": False},
+    {"permission_mode": "bypassPermissions"},
+    {"permission_mode": "acceptEdits"},
+    {"can_use_tool": lambda *a: None},
+    {"setting_sources": ["project"]},
+    {"hooks": {}},
+])
+def test_janus_options_guarded_overrides_raise(override):
+    server = _make_server()
+    with pytest.raises(ValueError, match="unsafe_overrides"):
+        janus_options(POLICY, mcp_servers={"research": server}, **override)
+    # ... and pass through with unsafe_overrides=True
+    janus_options(
+        POLICY, mcp_servers={"research": server}, unsafe_overrides=True, **override
+    )
+
+
+def test_janus_options_merges_shrink_only():
+    server = _make_server()
+    opts = janus_options(
+        POLICY,
+        mcp_servers={"research": server},
+        disallowed_tools=["mcp__research__fetch_page"],
+        # allowed_tools additions still pass the policy filter: read_secret and
+        # a made-up name are unknown to the policy and must NOT become reachable
+        allowed_tools=["mcp__research__read_secret", "mcp__research__made_up"],
+    )
+    assert "mcp__research__fetch_page" in opts.disallowed_tools
+    assert set(DEFAULT_DISALLOWED_TOOLS) <= set(opts.disallowed_tools)
+    assert "mcp__research__read_secret" not in opts.allowed_tools
+    assert "mcp__research__made_up" not in opts.allowed_tools
+
+
+def test_janus_options_non_enumerable_server_errors():
+    _make_server()  # skip when SDK absent
+    external = {"type": "stdio", "command": "some-mcp-server"}
+    with pytest.raises(ValueError, match="cannot enumerate"):
+        janus_options(POLICY, mcp_servers={"ext": external})
+    # An explicit allowed_tools merge acknowledges the server; entries are
+    # still policy-filtered.
+    opts = janus_options(
+        POLICY,
+        mcp_servers={"ext": external},
+        allowed_tools=["mcp__ext__fetch_page", "mcp__ext__evil_tool"],
+    )
+    assert opts.allowed_tools == ["mcp__ext__fetch_page"]
+
+
+def test_janus_options_empty_policy_errors():
+    server = _make_server()
+    with pytest.raises(ValueError, match="at least one rule"):
+        janus_options({}, mcp_servers={"research": server})
+
+
+def test_janus_options_extra_hooks_merge_alongside():
+    pytest.importorskip("claude_agent_sdk")
+    from claude_agent_sdk import HookMatcher
+
+    async def user_hook(input_data, tool_use_id, context):
+        return {}
+
+    server = _make_server()
+    extra = {"PreToolUse": [HookMatcher(hooks=[user_hook])], "Stop": [HookMatcher(hooks=[user_hook])]}
+    opts = janus_options(POLICY, mcp_servers={"research": server}, extra_hooks=extra)
+    assert len(opts.hooks["PreToolUse"]) == 2       # Janus's first, user's appended
+    assert "Stop" in opts.hooks
+
+
+def test_janus_options_import_error_without_sdk(monkeypatch):
+    import sys
+
+    monkeypatch.setitem(sys.modules, "claude_agent_sdk", None)
+    with pytest.raises(ImportError, match="claude-agent-sdk is required"):
+        janus_options(POLICY, mcp_servers={})
 
 
 # --- can_use_tool callback (SDK types required) ---------------------------------

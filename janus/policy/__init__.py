@@ -15,11 +15,13 @@ from typing import Any
 
 from janus.policy.enforcer import PolicyEnforcer
 from janus.policy.loader import parse_policy, save_policy, validate_policy_structure
+from janus.policy.taint import TaintTracker
 from janus.policy.validator import validate_argument, validate_schema
 
 __all__ = [
     "PDEEnforcer",
     "PolicyEnforcer",
+    "TaintTracker",
     "parse_policy",
     "save_policy",
     "validate_policy_structure",
