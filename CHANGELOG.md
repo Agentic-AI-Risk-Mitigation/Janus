@@ -35,6 +35,33 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Prompt-borne untrusted input** — `Session.mark_untrusted(text, label=, extract=,
+  normalize=)`: the one-line, audited way to declare pasted content (an inbound email, a
+  scraped page) untrusted at the call site that already knows it. Taints the session exactly
+  like reading an untrusted tool (gates fire), and optionally seeds the provenance set
+  `untrusted:<label>` for `not_in(...)` argument conditions and output checks. Closes the gap
+  where a fully-wired tracker reported a clean session while the hottest input in the system
+  rode in via the prompt. Extractor errors propagate — a silently empty deny-set fails open.
+- **Endorsements** (`janus.policy.endorsement`, via `Session.endorse` /
+  `Session.endorse_event`): audited, consumable declassification for in-the-loop tasks where
+  untrusted data legitimately drives the action. Value-scoped by default — an exact
+  `(tool, arg, value)` triple lifts only the deny that matches it, `uses=1` then the gate is
+  closed again; `scope="taint"` (explicit) lifts a whole-tool taint gate once; `uses=None`
+  standing endorsements warn on every consumption. Mandatory `by=`/`reason=` attribution.
+  Taint stays monotonic — nothing is ever un-tainted. Deny reasons from taint gates and
+  provenance conditions now carry an `(audit id ...)` suffix, and `endorse_event(id, by=,
+  reason=)` endorses exactly that deny mechanically — no retyping values, no scope guessing.
+- **Output-side checks** (`janus.checks`): deterministic, provenance-aware assertions over
+  model output for the text-to-text gap and the tool-free `structured()` shape — not an
+  injection classifier. `check_output(output, session, checks=[...], enforce=False)` runs
+  checks over final text or structured-output dicts, appends findings to the session audit
+  trail, and with `enforce=True` raises the new `OutputViolation` before code acts on the
+  output. Built-ins: `echoed_untrusted_values(label)` (flags values from the marked untrusted
+  input that rode into the output — the generalized "inbound URL echoed into the draft"
+  backstop; reports values as written in the output, matches through the set's normalizer)
+  and `values_grounded_in(allowed=[...])` (every extracted value must come from an allowed
+  provenance set). A check that raises becomes a finding, never a silent pass. `extract_urls`
+  ships as the common extractor for both `mark_untrusted` and the check factories.
 - **Argument-value provenance** (`janus.policy.provenance`): `ProvenanceLedger` records named
   value-sets from tool outputs at the post-execution seam (`collect(tool, label=, extract=,
   normalize=)` + `record`), and two condition factories gate arguments on membership at the

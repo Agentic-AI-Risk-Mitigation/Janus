@@ -21,16 +21,18 @@ from janus.policy.conditions import (
     is_context_condition,
 )
 from janus.policy.decision import Decision, decide_call
+from janus.policy.endorsement import EndorsementLog
 from janus.policy.enforcer import PolicyEnforcer
 from janus.policy.loader import parse_policy, save_policy, validate_policy_structure
 from janus.policy.provenance import ProvenanceLedger, from_output, normalize_url, not_in
-from janus.policy.session import Session
+from janus.policy.session import Session, untrusted_set
 from janus.policy.taint import TaintTracker
 from janus.policy.validator import validate_argument, validate_schema
 
 __all__ = [
     "ConditionContext",
     "Decision",
+    "EndorsementLog",
     "PDEEnforcer",
     "PolicyEnforcer",
     "ProvenanceLedger",
@@ -44,6 +46,7 @@ __all__ = [
     "is_context_condition",
     "normalize_url",
     "not_in",
+    "untrusted_set",
     "parse_policy",
     "save_policy",
     "validate_policy_structure",

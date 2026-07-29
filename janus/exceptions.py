@@ -90,3 +90,18 @@ class ToolNotFoundError(JanusError):
 class ProviderError(JanusError):
     """Raised when an LLM provider encounters an error."""
     pass
+
+
+class OutputViolation(JanusError):
+    """
+    Raised by ``janus.checks.check_output(..., enforce=True)`` when output
+    checks produced findings.
+
+    Attributes:
+        findings: The ``Finding`` records that triggered the violation.
+    """
+
+    def __init__(self, findings):
+        self.findings = list(findings)
+        summary = "; ".join(f"{f.check}: {f.message}" for f in self.findings)
+        super().__init__(f"output checks failed ({len(self.findings)} finding(s)): {summary}")

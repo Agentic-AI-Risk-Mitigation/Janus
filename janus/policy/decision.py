@@ -97,9 +97,16 @@ def decide_call(
 
     policy_key = resolve_name(runtime_name)
 
-    tracker = getattr(session, "taint", None) if session is not None else taint
-    if tracker is not None:
-        reason = tracker.check(policy_key)
+    # Session path prefers gate_check (taint gate + endorsement consultation
+    # + audit id in the reason); bare-tracker path stays taint.check.
+    if session is not None:
+        gate = getattr(session, "gate_check", None)
+        if gate is None and getattr(session, "taint", None) is not None:
+            gate = session.taint.check
+    else:
+        gate = taint.check if taint is not None else None
+    if gate is not None:
+        reason = gate(policy_key)
         if reason is not None:
             return Decision(False, reason, LAYER_TAINT)
 

@@ -106,6 +106,7 @@ class ProvenanceLedger:
         self._normalizers: dict[str, Normalizer] = {}
         self._sets: dict[str, set[Any]] = {}
         self._events: list[dict[str, Any]] = []
+        self._seq = 0
         self._logger = get_logger()
 
     # ------------------------------------------------------------------
@@ -179,14 +180,24 @@ class ProvenanceLedger:
                 grown.append(collector.label)
         return grown
 
-    def add(self, label: str, values: Iterable[Any], *, source: str = "manual") -> int:
-        """Add values to a set directly (used by ``record`` and, later, by
+    def add(
+        self,
+        label: str,
+        values: Iterable[Any],
+        *,
+        source: str = "manual",
+        normalize: Normalizer | None = None,
+    ) -> int:
+        """Add values to a set directly (used by ``record`` and by
         untrusted-input seeding). Returns how many values were new.
 
         Values pass through the label's bound normalizer (strings only);
-        ``None`` and unhashable values are skipped.
+        ``None`` and unhashable values are skipped. ``normalize`` binds a
+        normalizer to the label just like :meth:`collect` does (same
+        conflict rule).
         """
         with self._lock:
+            self._bind_normalizer(label, normalize)
             normalizer = self._normalizers.get(label)
             target = self._sets.setdefault(label, set())
             added = 0
@@ -240,18 +251,24 @@ class ProvenanceLedger:
 
     def record_miss(
         self, label: str, value: Any, *, tool_name: str, arg_name: str, kind: str = "miss"
-    ) -> None:
-        """Record that a provenance condition denied a call (for the audit
-        trail); called by the condition factories, not by integrators."""
-        self._append_event(kind=kind, label=label, tool=tool_name, arg=arg_name, value=repr(value))
+    ) -> str:
+        """Record that a provenance condition denied a call; returns the event
+        id (surfaced in deny reasons so a human can endorse exactly this deny
+        via ``Session.endorse_event``). Called by the condition factories, not
+        by integrators."""
+        return self._append_event(kind=kind, label=label, tool=tool_name, arg=arg_name, value=value)
 
-    def _append_event(self, *, locked: bool = False, **event: Any) -> None:
-        entry = {**event, "time": time.time()}
+    def _append_event(self, *, locked: bool = False, **event: Any) -> str:
         if locked:  # caller already holds the lock
+            self._seq += 1
+            entry = {**event, "id": f"prov-{self._seq}", "time": time.time()}
             self._events.append(entry)
         else:
             with self._lock:
+                self._seq += 1
+                entry = {**event, "id": f"prov-{self._seq}", "time": time.time()}
                 self._events.append(entry)
+        return entry["id"]
 
     @property
     def events(self) -> list[dict[str, Any]]:
@@ -268,11 +285,25 @@ class ProvenanceLedger:
         with self._lock:
             self._sets.clear()
             self._events.clear()
+            self._seq = 0
 
 
 # ---------------------------------------------------------------------------
 # Condition factories
 # ---------------------------------------------------------------------------
+
+
+def _consume_endorsement(ctx: ConditionContext, value: Any) -> bool:
+    """Lift this deny iff a value-scoped endorsement matches the exact triple.
+
+    Raw-equality match on the argument value as passed — endorse exactly what
+    was denied (``Session.endorse_event`` does this mechanically from the
+    audit id in the deny reason).
+    """
+    log = getattr(ctx.session, "endorsements", None)
+    if log is None:
+        return False
+    return log.consume(tool=ctx.tool_name, arg=ctx.arg_name, value=value) is not None
 
 
 def _ledger_of(ctx: ConditionContext, label: str) -> ProvenanceLedger:
@@ -306,7 +337,9 @@ def from_output(label: str):
         ledger = _ledger_of(ctx, label)
         if ledger.contains(label, value):
             return True
-        ledger.record_miss(label, value, tool_name=ctx.tool_name, arg_name=ctx.arg_name)
+        if _consume_endorsement(ctx, value):
+            return True
+        event_id = ledger.record_miss(label, value, tool_name=ctx.tool_name, arg_name=ctx.arg_name)
         raise ArgumentValidationError(
             argument_name=ctx.arg_name,
             value=value,
@@ -314,7 +347,8 @@ def from_output(label: str):
             message=(
                 f"Argument '{ctx.arg_name}' value {value!r} is not a recorded "
                 f"value of provenance set {label!r} — it must come verbatim "
-                "from a prior listed tool output in this session."
+                "from a prior listed tool output in this session. "
+                f"(audit id {event_id})"
             ),
         )
 
@@ -337,7 +371,9 @@ def not_in(label: str):
     def provenance_not_in(value: Any, ctx: ConditionContext) -> bool:
         ledger = _ledger_of(ctx, label)
         if ledger.contains(label, value):
-            ledger.record_miss(
+            if _consume_endorsement(ctx, value):
+                return True
+            event_id = ledger.record_miss(
                 label,
                 value,
                 tool_name=ctx.tool_name,
@@ -350,7 +386,8 @@ def not_in(label: str):
                 restriction=label,
                 message=(
                     f"Argument '{ctx.arg_name}' value {value!r} appears in the "
-                    f"untrusted provenance set {label!r} and is refused."
+                    f"untrusted provenance set {label!r} and is refused. "
+                    f"(audit id {event_id})"
                 ),
             )
         return True
