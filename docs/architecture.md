@@ -39,6 +39,7 @@ Janus sits between the LLM agent and its tools. Every tool call is intercepted, 
 | `PolicyEnforcer` | Evaluates tool calls against loaded policy. Used by `ToolRegistry`. |
 | `ToolRegistry` | Registers tools, dispatches calls, and invokes enforcer before execution. |
 | `LLMRunner` | Conversation loop: messages → LLM → tool calls → results → LLM until done. |
+| `TaintTracker` | Per-source session taint (`janus/policy/taint.py`). Records untrusted reads, gates sinks. Core install. |
 | Providers | `janus/llm/providers/` — OpenAI, Anthropic, Google, Azure, Bedrock, Ollama, vLLM, Together, OpenRouter. |
 
 ## Threat Model and Guarantees
@@ -72,7 +73,9 @@ Janus sits between the LLM agent and its tools. Every tool call is intercepted, 
 ## Known Limitations
 
 - **Missing arguments** *(fixed in 0.0.6)*: The JSON enforcer now fails closed when a call omits an argument that a policy condition restricts — the allow rule does not match and the call falls through to default-deny (`strict_conditions=True`, the default; `False` restores the legacy skip). A per-tool `required_args` option additionally rejects absent/blank arguments that no condition covers.
-- **Taint session reset**: Taint only increases during a session. Long-running services need a way to reset (e.g. per-request sessions). No `reset_session()` yet.
+- **PDE taint session reset**: PDE taint only increases during a session, and the PDE engine has no `reset_session()` — long-running services need per-request sessions. (`TaintTracker` does provide `reset()`.)
+- **Two unreconciled taint mechanisms**: PDE's manual session scalar and `TaintTracker`'s automatic per-source labels are independent. `TaintTracker` is the path forward, but the PDE engine does not consume it.
+- **`TaintTracker` seam coverage**: automatic derivation is wired only into the Claude Agent SDK adapter (`PostToolUse`). LangChain/ADK integrations must call `record_output()` themselves.
 - **SpiceDB unreachable**: If SpiceDB is down, the engine raises a gRPC exception. No timeout, retry, or fail-closed toggle.
 - **Schema divergence**: The SpiceDB schema lives in `janus/policy/pde/config.py`; bootstrap and relationships are in `pde/bootstrap.py`.
 - **LLM-generated policies**: Effective but not provably complete. Manual policies can be crafted for provable coverage; LLM-generated ones reduce attack surface but may miss edge cases.
@@ -95,6 +98,7 @@ janus/
 │   │   ├── interceptor.py # GraphInterceptor, _SyncClient
 │   │   ├── discovery.py  # GraphDiscoveryEngine
 │   │   └── bootstrap.py  # make_client, bootstrap, Session, allow_tool
+│   ├── taint.py          # TaintTracker — per-source taint + sink gating
 │   ├── generator.py      # LLM policy generation
 │   ├── loader.py
 │   └── validator.py

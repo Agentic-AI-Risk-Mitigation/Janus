@@ -111,4 +111,6 @@ Scenarios and the demo framework live under `examples/`. The current catalog inc
 
 4. **Web app**: Run the split-panel demo with `uv run uvicorn examples.app:app --reload` and open http://localhost:8000. See [Demo](demo.md) and `examples/README.md`.
 
-5. **Tests**: Run the example test suite with `uv run pytest tests/test_examples/ -v`.
+5. **Tests**: Run the regression suite with `uv run pytest`. It is fully offline — no LLM, no
+   SpiceDB. The live SDK smoke suite is opt-in: `JANUS_LIVE_SMOKE=1 uv run pytest tests/smoke/ -v`
+   (needs the `claude` CLI and API credentials).

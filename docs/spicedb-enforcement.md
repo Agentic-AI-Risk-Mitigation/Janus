@@ -2,7 +2,14 @@
 
 *ReBAC + taint tracking for IPI defense*
 
-The SpiceDB engine is an optional enforcement backend that combines relationship-based access control (ReBAC) via SpiceDB with runtime taint tracking. Use it when you need role-based tool access and automatic permission degradation as the agent reads from untrusted data.
+The SpiceDB engine is an optional enforcement backend that combines relationship-based access control (ReBAC) via SpiceDB with runtime taint tracking. Use it when you need role-based tool access and permission degradation as the agent reads from untrusted data.
+
+!!! note "For taint alone, you do not need this engine"
+    This engine's taint is a session-wide **scalar** that you raise by hand via
+    `agent.update_taint(risk)`, and it requires SpiceDB. If what you want is IPI defense through
+    taint, [`TaintTracker`](taint.md) is in the core install, uses per-source labels, and derives
+    them automatically from tool outputs. Reach for this engine when you need the **ReBAC /
+    role-based** layer.
 
 ## Install
 
@@ -85,7 +92,7 @@ Tools are grouped by risk. Tier 4 tools have no ACL edges and are always denied.
 
 3. Call `agent.update_taint(risk)` (or the scenario’s taint callback) when the agent reads from risky sources (e.g. after `fetch_url` or reading untrusted files).
 
-4. Run the example tests: `uv run pytest tests/test_examples/ -v`.
+4. Run the regression suite: `uv run pytest` (offline; does not exercise SpiceDB).
 
 ## Layout
 

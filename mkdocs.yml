@@ -26,4 +26,5 @@ nav:
   - Policy Reference: policy-reference.md
   - Architecture: architecture.md
   - Adapters: adapters.md
+  - Taint Tracking: taint.md
   - SpiceDB Enforcement: spicedb-enforcement.md

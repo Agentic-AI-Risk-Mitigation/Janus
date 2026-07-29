@@ -20,12 +20,13 @@ Coding agents (Claude Code, Cursor, LangChain, Google ADK) read untrusted files 
 
 Janus supports two engines:
 
-1. **JSON Schema enforcer** (default): Policy rules expressed in JSON. Conditions use JSON Schema to restrict tool arguments (pattern, enum, range, etc.).
-2. **SpiceDB-backed enforcement** (optional): ReBAC via SpiceDB plus runtime taint tracking for indirect prompt injection defense.
+1. **JSON Schema enforcer** (default): Policy rules expressed in JSON. Conditions use JSON Schema to restrict tool arguments (pattern, enum, range, etc.). Composes with [`TaintTracker`](taint.md) for session-level IPI defense — both in the core install.
+2. **SpiceDB-backed enforcement** (optional): ReBAC via SpiceDB plus a session-scalar taint gate.
 
 ## Features
 
 - Fine-grained policies with argument-level conditions
+- Automatic per-source taint tracking to gate sinks after untrusted reads (IPI defense)
 - LLM-generated policies from user query
 - Policy refinement as the agent gathers information
 - Three fallback actions: raise exception, exit, or prompt user
