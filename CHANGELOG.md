@@ -8,6 +8,22 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **BREAKING — `openai` and `jinja2` moved out of core dependencies** into the new `generate`
+  extra (`pip install 'janus-guard[generate]'`). They were only ever used by the LLM policy
+  generator, yet every consumer of the enforcer or an adapter paid for them — and `secure`
+  documents the fallout (a defensively pinned `openai` in its own requirements). The core
+  install is now what the docs always claimed: stdlib + `jsonschema` + `pydantic`. If you call
+  `generate_policy()`/`refine_policy()`, add the extra; nothing else changes.
+- **BREAKING — the policy generator no longer calls `load_dotenv()` at import time**, and
+  `python-dotenv` is no longer a dependency. Importing any part of Janus previously executed an
+  upward `.env` search from the process's *current working directory* and injected whatever it
+  found into `os.environ` — a real-world footgun that silently supplied a stale
+  `OPENAI_API_KEY` to a downstream project and made its auth behavior cwd-dependent. Callers
+  now manage their own environment; the generator reads keys from `os.environ` or its
+  `api_key` argument only.
+- `generate_policy`/`refine_policy` are now resolved lazily (PEP 562) from `janus`, so
+  `import janus` — and therefore every adapter import — no longer imports the generator module
+  or its dependencies. The public names are unchanged.
 - **BREAKING — strict condition semantics by default, closing the missing-argument bypass.**
   Previously the enforcer only checked a condition when its argument was *present*, so a rule
   gating `url` was silently skipped if the model omitted `url` entirely — an allow rule could
@@ -19,6 +35,41 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`janus.testing` — a public policy-test harness**, replacing the private-API imports
+  consumers were forced into (both `secure` policy test files imported the adapter's
+  `_decide`). `decide(policy, tool, args, ...)` evaluates one call through the exact decision
+  core the Claude Agent SDK `PreToolUse` hook runs (now factored into
+  `janus.policy.decision.decide_call`) and returns a `Decision` with `allowed`/`denied`, the
+  deny `reason`, and which **layer** decided (passthrough / taint / required_args / rules).
+  `replay(policy, sequence)` feeds recorded `(tool, args, ALLOW|DENY)` sequences through the
+  same core — `tests/test_ipi_scenarios.py` is its first consumer. The adapter's `_decide`
+  remains as a thin delegate, so existing imports keep working.
+- **`TaintTracker`** (`janus.policy.TaintTracker`, core install — no SpiceDB): framework-agnostic
+  session taint with **per-source integrity labels** instead of the PDE engine's monotonic
+  scalar. `sources={tool: label}` classifies untrusted reads, `gates={tool: labels}` blocks sinks
+  once a listed label has tainted the session (`"*"` gates on any taint — the strict Rule of Two),
+  and `classify=` adds content-aware labels. Derivation is automatic via the two seams
+  (`record_output` post-execution, `check` pre-execution), so no manual `update_taint()` calls are
+  needed. Every taint introduction and gate denial is recorded in `events` for audit; `reset()`
+  clears a session. New `docs/taint.md`.
+- **`janus_options()`** (Claude Agent SDK adapter): the recommended entry point, building a
+  locked-down `ClaudeAgentOptions` so a silently skipped `PreToolUse` hook — a regression that has
+  shipped upstream — can no longer escalate to arbitrary `Bash`. Generates `tools=[]`,
+  `strict_mcp_config=True`, `allowed_tools` = policy ∩ mounted tools, `permission_mode="dontAsk"`,
+  and built-ins + `Task` in `disallowed_tools`. Overrides that weaken the lockdown raise
+  `ValueError` unless `unsafe_overrides=True`; `allowed_tools`/`disallowed_tools` overrides are
+  merged, not replaced, so they can only shrink the reachable surface. `hook_approved_tools=`
+  keeps high-risk sinks off `allowed_tools` so the hook and the permission layer must both agree;
+  `extra_hooks=` merges your own matchers alongside Janus's.
+- **`janus_posttooluse_hook()` / `taint=` on `janus_hooks()`**: automatic taint derivation for the
+  Claude Agent SDK — `PostToolUse` records untrusted reads, `PreToolUse` gates sinks on them before
+  the static policy runs. Only calls that produced a response are recorded, so a blocked read never
+  taints the session.
+- **Live SDK smoke suite** (`tests/smoke/`, skipped unless `JANUS_LIVE_SMOKE=1`): exercises the real
+  `claude` CLI to verify the SDK-side semantics `janus_options()` depends on — hook firing,
+  `allowed_tools` shadowing, `tools=[]` availability, `StructuredOutput` delivery. Verified against
+  `claude-agent-sdk` 0.2.120 / CLI 2.1.218; runs recorded in `plans/claude-agent-sdk-hardening.md`.
+  `JANUS_SMOKE_SLOW=1` adds the hook-timeout experiment.
 - **Core `required_args`**: `PolicyEnforcer(required_args={"tool": ["arg", …]})` requires named
   arguments to be present and non-empty (rejecting `None` and blank strings) before rule
   evaluation, complementing strict conditions for arguments no condition covers. Promoted from

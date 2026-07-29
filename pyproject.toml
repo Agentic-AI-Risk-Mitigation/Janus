@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "janus-guard"
-version = "0.0.5"
+version = "0.1.0"
 description = "System-level security for LLM agents via fine-grained policy enforcement on tool calls."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -22,17 +22,15 @@ classifiers = [
 
 dependencies = [
     # Core — the minimum for the standalone PolicyEnforcer, static-policy
-    # loading, and LLM-based policy generation. No SpiceDB/authzed, no web
-    # server: those live behind the optional 'pde' and 'server' extras.
+    # loading, TaintTracker, and the hook-seam adapters. No provider SDKs, no
+    # SpiceDB/authzed, no web server: those live behind optional extras.
     "jsonschema>=4.0",
     "pydantic>=2.0",
-    "jinja2>=3.1",
-    "python-dotenv>=1.0",
-    # Default LLM provider (OpenAI-compatible)
-    "openai>=1.0,<2.0",
 ]
 
 [project.optional-dependencies]
+# LLM-based policy generation (janus.policy.generator / janus.generate_policy).
+generate  = ["openai>=1.0,<2.0", "jinja2>=3.1"]
 # SpiceDB-backed ReBAC enforcement with runtime taint tracking (PDEEnforcer).
 pde       = ["authzed>=1.24.3"]
 # Example web demo UI (examples/app.py).
@@ -50,6 +48,8 @@ langchain = [
 ]
 adk       = ["google-genai>=1.0"]
 all       = [
+    "openai>=1.0,<2.0",
+    "jinja2>=3.1",
     "authzed>=1.24.3",
     "fastapi>=0.135.1",
     "uvicorn[standard]>=0.41.0",
@@ -62,8 +62,11 @@ all       = [
     "langchain-openai>=0.2",
 ]
 dev = [
-    # PDE + server extras included so the full test suite (including the
-    # SpiceDB/taint path) and demo webapp can run under `janus-guard[dev]`.
+    # generate + PDE + server extras included so the full test suite (including
+    # the generator and SpiceDB/taint paths) and demo webapp can run under
+    # `janus-guard[dev]`.
+    "openai>=1.0,<2.0",
+    "jinja2>=3.1",
     "authzed>=1.24.3",
     "fastapi>=0.135.1",
     "uvicorn[standard]>=0.41.0",

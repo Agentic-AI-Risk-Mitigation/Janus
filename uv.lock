@@ -818,14 +818,11 @@ wheels = [
 
 [[package]]
 name = "janus-guard"
-version = "0.0.5"
+version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "jinja2" },
     { name = "jsonschema" },
-    { name = "openai" },
     { name = "pydantic" },
-    { name = "python-dotenv" },
 ]
 
 [package.optional-dependencies]
@@ -839,9 +836,11 @@ all = [
     { name = "claude-agent-sdk" },
     { name = "fastapi" },
     { name = "google-genai" },
+    { name = "jinja2" },
     { name = "langchain" },
     { name = "langchain-core" },
     { name = "langchain-openai" },
+    { name = "openai" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 anthropic = [
@@ -857,7 +856,9 @@ dev = [
     { name = "authzed" },
     { name = "claude-agent-sdk" },
     { name = "fastapi" },
+    { name = "jinja2" },
     { name = "mypy" },
+    { name = "openai" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
@@ -868,6 +869,10 @@ docs = [
     { name = "mkdocs-material" },
     { name = "mkdocs-mermaid2-plugin" },
     { name = "pymdown-extensions" },
+]
+generate = [
+    { name = "jinja2" },
+    { name = "openai" },
 ]
 google = [
     { name = "google-genai" },
@@ -903,7 +908,9 @@ requires-dist = [
     { name = "google-genai", marker = "extra == 'adk'", specifier = ">=1.0" },
     { name = "google-genai", marker = "extra == 'all'", specifier = ">=1.0" },
     { name = "google-genai", marker = "extra == 'google'", specifier = ">=1.0" },
-    { name = "jinja2", specifier = ">=3.1" },
+    { name = "jinja2", marker = "extra == 'all'", specifier = ">=3.1" },
+    { name = "jinja2", marker = "extra == 'dev'", specifier = ">=3.1" },
+    { name = "jinja2", marker = "extra == 'generate'", specifier = ">=3.1" },
     { name = "jsonschema", specifier = ">=4.0" },
     { name = "langchain", marker = "extra == 'all'", specifier = ">=0.3" },
     { name = "langchain", marker = "extra == 'langchain'", specifier = ">=0.3" },
@@ -915,18 +922,19 @@ requires-dist = [
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.0" },
     { name = "mkdocs-mermaid2-plugin", marker = "extra == 'docs'", specifier = ">=0.7.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0" },
-    { name = "openai", specifier = ">=1.0,<2.0" },
+    { name = "openai", marker = "extra == 'all'", specifier = ">=1.0,<2.0" },
+    { name = "openai", marker = "extra == 'dev'", specifier = ">=1.0,<2.0" },
+    { name = "openai", marker = "extra == 'generate'", specifier = ">=1.0,<2.0" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pymdown-extensions", marker = "extra == 'docs'", specifier = ">=10.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21" },
-    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'all'", specifier = ">=0.41.0" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'dev'", specifier = ">=0.41.0" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'server'", specifier = ">=0.41.0" },
 ]
-provides-extras = ["pde", "server", "anthropic", "google", "bedrock", "claude", "langchain", "adk", "all", "dev", "docs"]
+provides-extras = ["generate", "pde", "server", "anthropic", "google", "bedrock", "claude", "langchain", "adk", "all", "dev", "docs"]
 
 [[package]]
 name = "jinja2"

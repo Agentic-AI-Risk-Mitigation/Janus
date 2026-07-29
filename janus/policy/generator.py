@@ -9,6 +9,12 @@ during a task.
 Prompt templates live in ``janus/prompts/`` as Jinja2 ``.j2`` files.
 The generator renders them at runtime so prompt logic stays in templates,
 not scattered through Python code.
+
+Requires the ``generate`` extra (``pip install janus-guard[generate]``) for
+the provider SDK and Jinja2. Callers manage their own environment: this module
+reads API keys from ``os.environ`` (or the ``api_key`` argument) and never
+loads ``.env`` files itself — an importable library must not mutate its host
+process's environment as a side effect.
 """
 
 import json
@@ -16,12 +22,6 @@ import os
 import re
 from pathlib import Path
 from typing import Any
-
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -277,7 +277,10 @@ def _call_llm(
     try:
         from openai import OpenAI
     except ImportError:
-        raise ImportError("Install openai: uv add openai")
+        raise ImportError(
+            "Policy generation needs the 'generate' extra: "
+            "pip install 'janus-guard[generate]'"
+        )
 
     if os.getenv("OPENROUTER_API_KEY") and not api_key:
         oai_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))

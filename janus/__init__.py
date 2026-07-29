@@ -93,13 +93,35 @@ from janus.exceptions import (
 )
 from janus.logger import configure_logging, get_logger
 from janus.policy.enforcer import PolicyEnforcer
-from janus.policy.generator import generate_policy, refine_policy
 from janus.policy.loader import parse_policy, save_policy
 from janus.tools.base import ToolDef, ToolParam
 from janus.tools.builtin import BUILTIN_TOOLS
 from janus.tools.registry import ToolRegistry
 
-__version__ = "0.0.5"
+__version__ = "0.1.0"
+
+# The policy generator is loaded lazily: it needs the optional 'generate' extra
+# (openai, jinja2), and eagerly importing it here forced those dependencies —
+# and, historically, an import-time load_dotenv() side effect — onto every
+# consumer that only wanted the enforcer or an adapter.
+_LAZY_GENERATOR = {"generate_policy", "refine_policy"}
+
+
+def __getattr__(name: str):
+    if name in _LAZY_GENERATOR:
+        try:
+            from janus.policy import generator
+        except ImportError as exc:
+            raise ImportError(
+                f"{name}() needs the 'generate' extra: pip install 'janus-guard[generate]'"
+            ) from exc
+
+        return getattr(generator, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | _LAZY_GENERATOR)
 
 __all__ = [
     # Main entry point
