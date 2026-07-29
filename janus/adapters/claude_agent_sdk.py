@@ -71,6 +71,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only; runtime import stays lazy
 from janus.adapters._base import PolicySource, resolve_enforcer
 from janus.exceptions import PolicyViolation
 from janus.logger import get_logger
+from janus.policy.decision import decide_call
 from janus.policy.enforcer import RequiredArgs, check_required_args
 from janus.policy.taint import TaintTracker
 
@@ -142,29 +143,24 @@ def _decide(
     required_args: RequiredArgs,
     taint: TaintTracker | None = None,
 ) -> str | None:
-    """Shared decision core. Returns ``None`` to allow, or a deny reason string.
+    """Hook-shaped view of the decision core: ``None`` to allow, else a reason.
 
-    Passthrough tools return ``None`` (allow) without consulting the policy.
-    When a ``TaintTracker`` is supplied, its gate runs before the static
-    policy: a tool gated by session taint is denied even if a policy rule
-    would allow the call's arguments.
+    Delegates to :func:`janus.policy.decision.decide_call` — the same core the
+    public test harness (``janus.testing``) exposes, so consumer tests exercise
+    exactly what the deployed hook runs. Passthrough tools are allowed without
+    consulting the policy; a supplied ``TaintTracker``'s gate runs before the
+    static policy.
     """
-    if runtime_name in passthrough_tools:
-        return None
-
-    policy_key = resolve_name(runtime_name)
-
-    if taint is not None:
-        reason = taint.check(policy_key)
-        if reason is not None:
-            return reason
-
-    try:
-        _check_required_args(policy_key, arguments, required_args)
-        enforcer.enforce(policy_key, arguments)
-        return None
-    except PolicyViolation as exc:
-        return exc.reason
+    decision = decide_call(
+        enforcer,
+        runtime_name,
+        arguments,
+        passthrough_tools=passthrough_tools,
+        resolve_name=resolve_name,
+        required_args=required_args,
+        taint=taint,
+    )
+    return None if decision.allowed else decision.reason
 
 
 # =============================================================================
