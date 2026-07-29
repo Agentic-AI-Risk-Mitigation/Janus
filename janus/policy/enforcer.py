@@ -25,6 +25,7 @@ from typing import Any
 
 from janus.exceptions import ArgumentValidationError, PolicyViolation
 from janus.logger import get_logger
+from janus.policy.conditions import ConditionContext
 from janus.policy.validator import validate_argument
 
 # Type alias for a single policy rule tuple
@@ -197,7 +198,13 @@ class PolicyEnforcer:
     # Enforcement
     # ------------------------------------------------------------------
 
-    def enforce(self, tool_name: str, arguments: dict[str, Any]) -> None:
+    def enforce(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        *,
+        session: Any = None,
+    ) -> None:
         """
         Enforce the policy for a given tool call.
 
@@ -212,6 +219,9 @@ class PolicyEnforcer:
         Args:
             tool_name: Name of the tool being called.
             arguments: Keyword arguments the tool will receive.
+            session: Optional per-run session state, exposed to context-aware
+                conditions via ``ConditionContext.session``. The enforcer only
+                reads it — it holds no session state of its own.
 
         Raises:
             PolicyViolation: If the tool call is blocked by policy.
@@ -238,7 +248,10 @@ class PolicyEnforcer:
             raise PolicyViolation(tool_name=tool_name, arguments=arguments, reason=reason)
 
         try:
-            _evaluate_rules(tool_name, arguments, rules, strict=self._strict_conditions)
+            _evaluate_rules(
+                tool_name, arguments, rules,
+                strict=self._strict_conditions, session=session,
+            )
             self._logger.policy_decision(tool_name, allowed=True)
         except PolicyViolation as exc:
             self._logger.policy_decision(tool_name, allowed=False, reason=exc.reason)
@@ -256,6 +269,7 @@ def _evaluate_rules(
     rules: list[PolicyRule],
     *,
     strict: bool = True,
+    session: Any = None,
 ) -> None:
     """
     Walk through policy rules in priority order and apply the first match.
@@ -275,7 +289,10 @@ def _evaluate_rules(
 
         if effect == 0:  # Allow rule
             try:
-                _check_conditions(arguments, conditions, require_present=strict)
+                _check_conditions(
+                    arguments, conditions,
+                    require_present=strict, tool_name=tool_name, session=session,
+                )
                 return  # All conditions passed → allowed
             except ArgumentValidationError as exc:
                 skipped_reasons.append(f"Allow rule (priority={priority}) skipped: {exc.message}")
@@ -283,7 +300,9 @@ def _evaluate_rules(
 
         elif effect == 1:  # Deny rule
             try:
-                _check_conditions(arguments, conditions)
+                _check_conditions(
+                    arguments, conditions, tool_name=tool_name, session=session,
+                )
                 # All deny conditions matched → blocked
                 _handle_block(tool_name, arguments, fallback, rule)
             except ArgumentValidationError:
@@ -306,6 +325,8 @@ def _check_conditions(
     conditions: dict,
     *,
     require_present: bool = False,
+    tool_name: str = "",
+    session: Any = None,
 ) -> None:
     """
     Validate all conditions against the provided arguments.
@@ -315,10 +336,15 @@ def _check_conditions(
     argument must not satisfy the rule. Without it (deny rules, or legacy
     mode), conditions on absent arguments are skipped, which for deny rules
     means a vacuous match.
+
+    Each present-argument check gets a :class:`ConditionContext` (tool name,
+    read-only view of the full call, session state) so context-aware
+    conditions can see beyond their own scalar; plain restrictions ignore it.
     """
     for arg_name, restriction in conditions.items():
         if arg_name in arguments:
-            validate_argument(arg_name, arguments[arg_name], restriction)
+            context = ConditionContext.build(tool_name, arg_name, arguments, session)
+            validate_argument(arg_name, arguments[arg_name], restriction, context=context)
         elif require_present:
             raise ArgumentValidationError(
                 argument_name=arg_name,

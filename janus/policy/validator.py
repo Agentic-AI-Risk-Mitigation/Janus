@@ -15,9 +15,16 @@ from jsonschema import ValidationError as JsonSchemaValidationError
 from jsonschema import validate
 
 from janus.exceptions import ArgumentValidationError
+from janus.policy.conditions import ConditionContext, is_context_condition
 
 
-def validate_argument(arg_name: str, value: Any, restriction: Any) -> None:
+def validate_argument(
+    arg_name: str,
+    value: Any,
+    restriction: Any,
+    *,
+    context: "ConditionContext | None" = None,
+) -> None:
     """
     Validate a single argument against a restriction.
 
@@ -29,11 +36,17 @@ def validate_argument(arg_name: str, value: Any, restriction: Any) -> None:
       must match the pattern via ``re.match``.
     - ``callable``: A custom validator. It must return a truthy value to
       indicate acceptance, or raise an exception to indicate rejection.
+      A callable marked with :func:`janus.policy.conditions.context_condition`
+      is instead invoked as ``restriction(value, context)``; evaluating such
+      a condition without a ``context`` fails closed.
 
     Args:
         arg_name: Name of the argument (used in error messages).
         value: The value to validate.
         restriction: The restriction to validate against.
+        context: The :class:`ConditionContext` for context-aware conditions
+            (tool name, sibling arguments, session state). Built by the
+            enforcer; plain restrictions ignore it.
 
     Raises:
         ArgumentValidationError: If validation fails.
@@ -73,11 +86,26 @@ def validate_argument(arg_name: str, value: Any, restriction: Any) -> None:
 
     elif callable(restriction):
         try:
-            result = restriction(value)
+            if is_context_condition(restriction):
+                if context is None:
+                    # A context-aware condition without its context cannot make
+                    # the decision it was written to make — deny, never guess.
+                    raise ArgumentValidationError(
+                        argument_name=arg_name,
+                        value=value,
+                        restriction=restriction,
+                        message=(
+                            f"Context condition for '{arg_name}' was evaluated "
+                            "without a ConditionContext; failing closed."
+                        ),
+                    )
+                result = restriction(value, context)
+            else:
+                result = restriction(value)
             if not result:
                 try:
                     source = inspect.getsource(restriction)
-                except OSError:
+                except (OSError, TypeError):
                     source = repr(restriction)
                 raise ArgumentValidationError(
                     argument_name=arg_name,

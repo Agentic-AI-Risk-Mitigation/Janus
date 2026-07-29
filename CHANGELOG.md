@@ -35,6 +35,22 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Context-aware conditions** (`janus.policy.conditions`): callable conditions can now opt
+  into a richer contract with the explicit `@context_condition` marker — they are invoked as
+  `restriction(value, ctx)` where `ConditionContext` carries the tool name, the argument name,
+  a **read-only** view of the full call's arguments, and per-run `session` state (threaded via
+  the new keyword-only `PolicyEnforcer.enforce(..., session=)`; `None` until an integration
+  wires one). Unmarked callables keep the classic single-argument contract untouched — the
+  dispatch is an attribute check, never signature inspection, so wrappers and partials can't
+  silently change a condition's contract. A marked condition evaluated without a context fails
+  closed. This dissolves the expressiveness boundary that forced consumers to hand-roll
+  cross-argument and session-dependent checks inside tool bodies.
+- **Condition composition**: `all_of(*restrictions)` / `any_of(*restrictions)` compose
+  restrictions of any supported kind (JSON Schema dict, regex string, plain callable, context
+  condition), nestably. `all_of` denies on the first failing member and propagates that
+  member's own message; `any_of` denies only if every member fails, reporting all attempts.
+  Strict absent-argument semantics are unchanged: an allow rule conditioning an absent argument
+  still does not match, composed or not.
 - **`janus.testing` — a public policy-test harness**, replacing the private-API imports
   consumers were forced into (both `secure` policy test files imported the adapter's
   `_decide`). `decide(policy, tool, args, ...)` evaluates one call through the exact decision

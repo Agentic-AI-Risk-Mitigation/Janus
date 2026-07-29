@@ -13,6 +13,13 @@ or the package as a whole — does not eagerly pull in ``authzed``.
 
 from typing import Any
 
+from janus.policy.conditions import (
+    ConditionContext,
+    all_of,
+    any_of,
+    context_condition,
+    is_context_condition,
+)
 from janus.policy.decision import Decision, decide_call
 from janus.policy.enforcer import PolicyEnforcer
 from janus.policy.loader import parse_policy, save_policy, validate_policy_structure
@@ -20,11 +27,16 @@ from janus.policy.taint import TaintTracker
 from janus.policy.validator import validate_argument, validate_schema
 
 __all__ = [
+    "ConditionContext",
     "Decision",
     "PDEEnforcer",
     "PolicyEnforcer",
     "TaintTracker",
+    "all_of",
+    "any_of",
+    "context_condition",
     "decide_call",
+    "is_context_condition",
     "parse_policy",
     "save_policy",
     "validate_policy_structure",
