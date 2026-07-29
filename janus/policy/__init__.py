@@ -23,6 +23,8 @@ from janus.policy.conditions import (
 from janus.policy.decision import Decision, decide_call
 from janus.policy.enforcer import PolicyEnforcer
 from janus.policy.loader import parse_policy, save_policy, validate_policy_structure
+from janus.policy.provenance import ProvenanceLedger, from_output, normalize_url, not_in
+from janus.policy.session import Session
 from janus.policy.taint import TaintTracker
 from janus.policy.validator import validate_argument, validate_schema
 
@@ -31,12 +33,17 @@ __all__ = [
     "Decision",
     "PDEEnforcer",
     "PolicyEnforcer",
+    "ProvenanceLedger",
+    "Session",
     "TaintTracker",
     "all_of",
     "any_of",
     "context_condition",
     "decide_call",
+    "from_output",
     "is_context_condition",
+    "normalize_url",
+    "not_in",
     "parse_policy",
     "save_policy",
     "validate_policy_structure",

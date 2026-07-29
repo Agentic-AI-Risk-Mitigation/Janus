@@ -35,6 +35,27 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Argument-value provenance** (`janus.policy.provenance`): `ProvenanceLedger` records named
+  value-sets from tool outputs at the post-execution seam (`collect(tool, label=, extract=,
+  normalize=)` + `record`), and two condition factories gate arguments on membership at the
+  pre-execution seam — `from_output(label)` (**positive** provenance: the argument must be a
+  value a listed tool actually returned; empty set or missing session denies) and
+  `not_in(label)` (**negative** provenance: deny values from an untrusted set). This makes the
+  hand-rolled "fetch only URLs a prior search returned" pattern a one-line policy condition:
+  `"url": all_of(ssrf_ok, from_output("searched_urls"))`. Exact-match membership with opt-in
+  normalization (`normalize_url` ships for the URL case); every collection and every
+  provenance-caused deny lands in an audit trail. Collector errors default to "collected
+  nothing" (fails closed for allow-sets); register deny-set collectors with `on_error="raise"`.
+- **`Session`** (`janus.policy.Session`): the explicit per-run home for cross-call state —
+  wraps a `TaintTracker` and a `ProvenanceLedger`, feeds both from one
+  `record_output(tool, output)`, and merges their audit trails in `events`. Threaded
+  explicitly everywhere: `janus_options(session=...)` / `janus_hooks(session=...)` wire the
+  `PostToolUse` recording seam (with MCP content blocks unwrapped via the new
+  `unwrap_tool_response()` so extractors see the dict the tool body returned) and expose the
+  session to context conditions at `PreToolUse`; `PolicyEnforcer.enforce(session=)`,
+  `decide_call(session=)`, and `janus.testing.decide/replay(session=)` take the same object.
+  The adapter's `taint=` keeps working but is deprecation-warned (`session=Session(taint=...)`
+  supersedes it); passing both raises.
 - **Context-aware conditions** (`janus.policy.conditions`): callable conditions can now opt
   into a richer contract with the explicit `@context_condition` marker — they are invoked as
   `restriction(value, ctx)` where `ConditionContext` carries the tool name, the argument name,

@@ -30,6 +30,8 @@ bare names either way).
 
 from __future__ import annotations
 
+from typing import Any
+
 from janus.adapters._base import PolicySource, resolve_enforcer
 from janus.adapters.claude_agent_sdk import (
     DEFAULT_PASSTHROUGH_TOOLS,
@@ -54,6 +56,7 @@ def decide(
     *,
     required_args: RequiredArgs | None = None,
     taint: TaintTracker | None = None,
+    session: Any = None,
     passthrough_tools: frozenset[str] = DEFAULT_PASSTHROUGH_TOOLS,
     resolve_name: NameResolver = default_resolve_name,
 ) -> Decision:
@@ -65,6 +68,11 @@ def decide(
     the adapter hook's knobs; pass the same values your integration passes to
     ``janus_options()`` / ``janus_hooks()`` and the test reproduces the
     deployed decision exactly.
+
+    ``session`` (a :class:`janus.policy.Session`) drives provenance and
+    context conditions; simulate prior tool outputs with
+    ``session.record_output(tool, output)`` between calls. Pass either
+    ``session`` or ``taint``, not both.
     """
     return decide_call(
         resolve_enforcer(policy),
@@ -74,6 +82,7 @@ def decide(
         resolve_name=resolve_name,
         required_args=required_args,
         taint=taint,
+        session=session,
     )
 
 
@@ -83,6 +92,7 @@ def replay(
     *,
     required_args: RequiredArgs | None = None,
     taint: TaintTracker | None = None,
+    session: Any = None,
     passthrough_tools: frozenset[str] = DEFAULT_PASSTHROUGH_TOOLS,
     resolve_name: NameResolver = default_resolve_name,
 ) -> list[Decision]:
@@ -95,8 +105,9 @@ def replay(
     per-step decisions for further assertions.
 
     Note: replay evaluates decisions only; it does not execute tools, so a
-    ``TaintTracker`` passed here is *checked* but never fed — call
-    ``taint.record_output(...)`` between steps to simulate completed reads.
+    ``TaintTracker``/``Session`` passed here is *checked* but never fed —
+    call ``taint.record_output(...)`` / ``session.record_output(...)``
+    between steps to simulate completed reads.
     """
     enforcer = resolve_enforcer(policy)
     decisions: list[Decision] = []
@@ -109,6 +120,7 @@ def replay(
             resolve_name=resolve_name,
             required_args=required_args,
             taint=taint,
+            session=session,
         )
         decisions.append(decision)
         if decision.allowed != expected:

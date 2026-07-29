@@ -61,7 +61,9 @@ not installed. Only ``make_can_use_tool`` and ``janus_hooks`` (which builds
 from __future__ import annotations
 
 import asyncio
+import json
 import re
+import warnings
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
@@ -73,6 +75,7 @@ from janus.exceptions import PolicyViolation
 from janus.logger import get_logger
 from janus.policy.decision import decide_call
 from janus.policy.enforcer import RequiredArgs, check_required_args
+from janus.policy.session import Session
 from janus.policy.taint import TaintTracker
 
 # SDK-internal tools that are part of the transport, not the agent's toolset, and
@@ -133,6 +136,64 @@ def default_resolve_name(tool_name: str) -> str:
     return _MCP_PREFIX_RE.sub("", tool_name)
 
 
+def unwrap_tool_response(response: Any) -> Any:
+    """Best-effort unwrap of a ``PostToolUse`` ``tool_response`` to the dict
+    the tool body returned.
+
+    MCP tool results arrive as content blocks
+    (``{"content": [{"type": "text", "text": "<json>"}], ...}`` or a bare
+    block list). Provenance extractors are written against the tool's own
+    return value, so this pulls the text blocks and attempts ``json.loads``.
+    Anything unrecognized is returned unchanged — extractors must tolerate
+    the raw shape anyway (and collect nothing on mismatch, which fails
+    closed for allow-sets).
+    """
+    blocks: Any = None
+    if isinstance(response, dict) and isinstance(response.get("content"), list):
+        blocks = response["content"]
+    elif isinstance(response, list):
+        blocks = response
+    if blocks is None:
+        return response
+
+    texts: list[str] = [
+        b["text"]
+        for b in blocks
+        if isinstance(b, dict) and b.get("type") == "text" and isinstance(b.get("text"), str)
+    ]
+    if not texts:
+        return response
+    joined = "\n".join(texts)
+    try:
+        return json.loads(joined)
+    except ValueError:
+        return joined
+
+
+def _resolve_state(
+    taint: TaintTracker | None, session: Session | None
+) -> tuple[TaintTracker | None, Session | None]:
+    """Shared validation for the ``taint=``/``session=`` pair.
+
+    ``session`` supersedes ``taint`` (its ``.taint`` is the gate); passing
+    both is ambiguous and refused. ``taint=`` alone still works but warns —
+    a Session adds provenance and the merged audit trail for free.
+    """
+    if taint is not None and session is not None:
+        raise ValueError(
+            "pass either taint= or session= (session.taint is the gate), not both"
+        )
+    if taint is not None:
+        warnings.warn(
+            "taint= is superseded by session= (janus.policy.Session wraps a "
+            "TaintTracker and adds provenance); it keeps working but new "
+            "integrations should pass session=Session(taint=tracker).",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+    return taint, session
+
+
 def _decide(
     enforcer,
     runtime_name: str,
@@ -142,14 +203,16 @@ def _decide(
     resolve_name: NameResolver,
     required_args: RequiredArgs,
     taint: TaintTracker | None = None,
+    session: Session | None = None,
 ) -> str | None:
     """Hook-shaped view of the decision core: ``None`` to allow, else a reason.
 
     Delegates to :func:`janus.policy.decision.decide_call` — the same core the
     public test harness (``janus.testing``) exposes, so consumer tests exercise
     exactly what the deployed hook runs. Passthrough tools are allowed without
-    consulting the policy; a supplied ``TaintTracker``'s gate runs before the
-    static policy.
+    consulting the policy; the taint gate (``taint`` or ``session.taint``)
+    runs before the static policy, and ``session`` is exposed to context-aware
+    conditions.
     """
     decision = decide_call(
         enforcer,
@@ -159,6 +222,7 @@ def _decide(
         resolve_name=resolve_name,
         required_args=required_args,
         taint=taint,
+        session=session,
     )
     return None if decision.allowed else decision.reason
 
@@ -175,6 +239,7 @@ def janus_pretooluse_hook(
     passthrough_tools: frozenset[str] = DEFAULT_PASSTHROUGH_TOOLS,
     resolve_name: NameResolver = default_resolve_name,
     taint: TaintTracker | None = None,
+    session: Session | None = None,
     hook_approved_tools: set[str] | frozenset[str] | None = None,
 ) -> Callable[[dict, str | None, Any], Awaitable[dict]]:
     """Build a ``PreToolUse`` hook callback that enforces a Janus policy.
@@ -207,7 +272,14 @@ def janus_pretooluse_hook(
         untrusted source, regardless of arguments. Pair with
         :func:`janus_posttooluse_hook` (same tracker instance) so taint is
         derived automatically from tool outputs; :func:`janus_hooks` wires both
-        seams for you.
+        seams for you. Superseded by ``session=`` (deprecation warning).
+    session : Session | None
+        Per-run :class:`janus.policy.Session`. Its ``.taint`` supplies the
+        gate above, and the whole Session is exposed to context-aware policy
+        conditions (``ctx.session``) — this is what provenance conditions
+        (``from_output`` / ``not_in``) require. Pass either ``session`` or
+        ``taint``, not both. Pair with the ``PostToolUse`` seam (same Session)
+        so taint and provenance are recorded automatically.
     hook_approved_tools : set[str] | None
         Bare policy keys (post-``resolve_name``) whose *allow* decision is
         returned as an explicit ``permissionDecision: "allow"`` instead of the
@@ -239,6 +311,7 @@ def janus_pretooluse_hook(
             hooks={"PreToolUse": [HookMatcher(hooks=[hook])]},
         )
     """
+    taint, session = _resolve_state(taint, session)
     enforcer = resolve_enforcer(policy)
     required = required_args or {}
     explicit_allow = frozenset(hook_approved_tools or ())
@@ -257,6 +330,7 @@ def janus_pretooluse_hook(
                 resolve_name=resolve_name,
                 required_args=required,
                 taint=taint,
+                session=session,
             )
         except Exception as exc:  # fail closed on Janus's own defects
             reason = (
@@ -292,21 +366,29 @@ def janus_pretooluse_hook(
 
 
 def janus_posttooluse_hook(
-    taint: TaintTracker,
+    taint: TaintTracker | Session,
     *,
     resolve_name: NameResolver = default_resolve_name,
+    unwrap: Callable[[Any], Any] | None = None,
 ) -> Callable[[dict, str | None, Any], Awaitable[dict]]:
-    """Build a ``PostToolUse`` hook that derives session taint from tool outputs.
+    """Build a ``PostToolUse`` hook that records tool outputs into session state.
 
-    Fires after a tool has executed — its output is now in the model's context,
-    so if the tool is a classified untrusted source (``TaintTracker.sources``),
-    the session is tainted from this point on and gated sinks start denying.
-    Pass the SAME ``TaintTracker`` instance to :func:`janus_pretooluse_hook`
-    (or use :func:`janus_hooks` with ``taint=``, which wires both).
+    Fires after a tool has executed — its output is now in the model's context.
+    The first argument is anything with ``record_output(tool, output)``: a bare
+    :class:`TaintTracker` (taint only) or a :class:`janus.policy.Session`
+    (taint **and** provenance). Pass the SAME instance to
+    :func:`janus_pretooluse_hook` (or use :func:`janus_hooks`, which wires
+    both seams).
 
-    Denied calls never reach this hook's taint derivation in a harmful way:
-    the SDK still reports blocked tools here, but recording their *attempt* as
-    a read would be wrong — so only calls with a response are recorded.
+    ``unwrap`` is applied to the raw ``tool_response`` before recording; when
+    :func:`janus_hooks` wires a Session it passes :func:`unwrap_tool_response`
+    so provenance extractors (and taint classifiers) see the dict the tool
+    body returned rather than MCP content blocks. The taint-only path keeps
+    the raw response for backwards compatibility.
+
+    Denied calls never reach this hook's derivation in a harmful way: the SDK
+    still reports blocked tools here, but recording their *attempt* as a read
+    would be wrong — so only calls with a response are recorded.
     """
     logger = get_logger()
 
@@ -316,7 +398,17 @@ def janus_posttooluse_hook(
         response = input_data.get("tool_response")
         if response is None:
             return {}
-        labels = taint.record_output(policy_key, response)
+        if unwrap is not None:
+            try:
+                response = unwrap(response)
+            except Exception as exc:  # record the raw shape rather than nothing
+                logger.warning(
+                    f"PROVENANCE unwrap failed for '{policy_key}' "
+                    f"({type(exc).__name__}: {exc}); recording raw response"
+                )
+                response = input_data.get("tool_response")
+        recorded = taint.record_output(policy_key, response)
+        labels = recorded.get("taint", []) if isinstance(recorded, dict) else recorded
         if labels:
             logger.warning(
                 f"TAINT session tainted by {labels} (read via '{policy_key}')"
@@ -333,6 +425,7 @@ def janus_hooks(
     passthrough_tools: frozenset[str] = DEFAULT_PASSTHROUGH_TOOLS,
     resolve_name: NameResolver = default_resolve_name,
     taint: TaintTracker | None = None,
+    session: Session | None = None,
     hook_approved_tools: set[str] | frozenset[str] | None = None,
 ) -> dict:
     """Convenience wrapper: return a ready ``hooks=`` dict for ``ClaudeAgentOptions``.
@@ -342,18 +435,27 @@ def janus_hooks(
     :func:`janus_pretooluse_hook` directly if you want to avoid the import or set a
     matcher pattern.
 
-    With ``taint=`` a ``TaintTracker``, both seams are wired: a ``PostToolUse``
-    hook derives taint from tool outputs automatically, and the ``PreToolUse``
-    hook gates sink tools on it (before the static policy runs)::
+    With ``session=`` a :class:`janus.policy.Session`, both seams are wired:
+    a ``PostToolUse`` hook records every tool output into the session (taint
+    labels *and* provenance value-sets, with MCP content blocks unwrapped via
+    :func:`unwrap_tool_response`), and the ``PreToolUse`` hook gates sinks on
+    session taint and exposes the session to context-aware policy conditions
+    (``from_output`` / ``not_in`` / custom ``@context_condition``)::
 
-        tracker = TaintTracker(
-            sources={"fetch_page": "web", "read_email": "email"},
+        session = Session(taint=TaintTracker(
+            sources={"fetch_page": "web"},
             gates={"send_email": "*"},          # Rule of Two: no send after any read
+        ))
+        session.provenance.collect(
+            "web_search", label="searched_urls",
+            extract=lambda out: [r["url"] for r in out.get("results") or []],
+            normalize=normalize_url,
         )
-        options = ClaudeAgentOptions(..., hooks=janus_hooks(POLICY, taint=tracker))
+        options = ClaudeAgentOptions(..., hooks=janus_hooks(POLICY, session=session))
 
-    Use one tracker per session; call ``tracker.reset()`` only at session
-    boundaries.
+    ``taint=`` (a bare tracker, taint gating only, raw responses) keeps
+    working but is superseded by ``session=``; passing both raises. Use one
+    Session/tracker per agent session; ``reset()`` only at session boundaries.
     """
     try:
         from claude_agent_sdk import HookMatcher
@@ -366,12 +468,17 @@ def janus_hooks(
     hook = janus_pretooluse_hook(
         policy, required_args=required_args,
         passthrough_tools=passthrough_tools, resolve_name=resolve_name,
-        taint=taint, hook_approved_tools=hook_approved_tools,
+        taint=taint, session=session, hook_approved_tools=hook_approved_tools,
     )
     # The hooks are intentionally typed with broad dict signatures so this module
     # imports without the SDK; they are shape-correct for the SDK's HookCallback.
     hooks: dict = {"PreToolUse": [HookMatcher(hooks=[hook])]}  # type: ignore[list-item]
-    if taint is not None:
+    if session is not None:
+        post = janus_posttooluse_hook(
+            session, resolve_name=resolve_name, unwrap=unwrap_tool_response,
+        )
+        hooks["PostToolUse"] = [HookMatcher(hooks=[post])]  # type: ignore[list-item]
+    elif taint is not None:
         post = janus_posttooluse_hook(taint, resolve_name=resolve_name)
         hooks["PostToolUse"] = [HookMatcher(hooks=[post])]  # type: ignore[list-item]
     return hooks
@@ -420,6 +527,7 @@ def janus_options(
     mcp_servers: dict[str, Any],
     required_args: RequiredArgs | None = None,
     taint: TaintTracker | None = None,
+    session: Session | None = None,
     resolve_name: NameResolver = default_resolve_name,
     passthrough_tools: frozenset[str] = DEFAULT_PASSTHROUGH_TOOLS,
     hook_approved_tools: set[str] | frozenset[str] | None = None,
@@ -453,6 +561,11 @@ def janus_options(
 
     Parameters beyond the hook-seam ones:
 
+    session : Session | None
+        Per-run :class:`janus.policy.Session` — wires the ``PostToolUse``
+        recording seam (taint + provenance, responses unwrapped) and exposes
+        the session to context-aware conditions at ``PreToolUse``. Supersedes
+        ``taint=`` (which keeps working, taint-only); passing both raises.
     hook_approved_tools : set[str] | None
         Bare policy keys of high-risk sinks (e.g. ``{"send_email"}``) to keep
         **off** ``allowed_tools`` even though mounted and policy-listed. The
@@ -587,6 +700,7 @@ def janus_options(
             passthrough_tools=passthrough_tools,
             resolve_name=resolve_name,
             taint=taint,
+            session=session,
             hook_approved_tools=approved or None,
         )
         for event, matchers in (extra_hooks or {}).items():
@@ -616,6 +730,7 @@ def make_can_use_tool(
     passthrough_tools: frozenset[str] = DEFAULT_PASSTHROUGH_TOOLS,
     resolve_name: NameResolver = default_resolve_name,
     taint: TaintTracker | None = None,
+    session: Session | None = None,
 ) -> Callable[[str, dict, Any], Awaitable[Any]]:
     """Build a ``can_use_tool`` callback that enforces a Janus policy.
 
@@ -641,6 +756,7 @@ def make_can_use_tool(
             "Install with: pip install claude-agent-sdk"
         ) from exc
 
+    taint, session = _resolve_state(taint, session)
     enforcer = resolve_enforcer(policy)
     required = required_args or {}
     logger = get_logger()
@@ -655,6 +771,7 @@ def make_can_use_tool(
                 resolve_name=resolve_name,
                 required_args=required,
                 taint=taint,
+                session=session,
             )
         except Exception as exc:  # fail closed on Janus's own defects
             reason = (
@@ -682,6 +799,7 @@ def guard_tool_body(
     *,
     required_args: RequiredArgs | None = None,
     resolve_name: NameResolver = default_resolve_name,
+    session: Session | None = None,
 ) -> Callable[[dict], Awaitable[dict]]:
     """Wrap an async ``@tool`` handler so Janus also enforces at execution time.
 
@@ -702,7 +820,7 @@ def guard_tool_body(
         policy_key = resolve_name(tool_name)
         try:
             _check_required_args(policy_key, arguments, required)
-            enforcer.enforce(policy_key, arguments)
+            enforcer.enforce(policy_key, arguments, session=session)
         except PolicyViolation as exc:
             logger.policy_decision(tool_name, allowed=False, reason=exc.reason)
             return {
