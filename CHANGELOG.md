@@ -35,6 +35,17 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`on_decision` audit callback in the Claude Agent SDK adapter** — `janus_options()`,
+  `janus_hooks()`, and `janus_pretooluse_hook()` accept an optional
+  `on_decision(runtime_tool_name, arguments, allowed, reason)` callable, invoked once per
+  PreToolUse evaluation (passthrough tools and the fail-closed internal-error path included;
+  `reason` is `None` on allow). Gives downstream consumers a programmatic seam to audit
+  hook-level policy denies, which previously surfaced only in Python logging. Strictly
+  observational: callback exceptions are logged and swallowed and can never change an
+  enforcement outcome. When a `Session` is wired, denies are additionally recorded as
+  `{"kind": "policy_deny", ...}` session notes, giving `session.events` symmetry with the
+  taint `gate_deny` events. Version bumped to 0.1.1 so consumers can feature-detect
+  `on_decision` from `janus.__version__`.
 - **Prompt-borne untrusted input** — `Session.mark_untrusted(text, label=, extract=,
   normalize=)`: the one-line, audited way to declare pasted content (an inbound email, a
   scraped page) untrusted at the call site that already knows it. Taints the session exactly

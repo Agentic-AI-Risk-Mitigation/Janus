@@ -241,6 +241,7 @@ def janus_pretooluse_hook(
     taint: TaintTracker | None = None,
     session: Session | None = None,
     hook_approved_tools: set[str] | frozenset[str] | None = None,
+    on_decision: Callable[[str, dict, bool, str | None], None] | None = None,
 ) -> Callable[[dict, str | None, Any], Awaitable[dict]]:
     """Build a ``PreToolUse`` hook callback that enforces a Janus policy.
 
@@ -287,6 +288,15 @@ def janus_pretooluse_hook(
         off ``allowed_tools``: under ``permission_mode="dontAsk"`` such a tool
         runs only when this hook affirmatively approves it — if the hook is
         skipped (upstream hook regressions), the permission layer denies it.
+    on_decision : Callable[[str, dict, bool, str | None], None] | None
+        Audit callback, called once per PreToolUse evaluation as
+        ``on_decision(runtime_tool_name, arguments, allowed, reason)`` —
+        ``reason`` is ``None`` on allow, the enforcer's reason string on deny
+        (including the synthesized fail-closed reason when enforcement itself
+        errors). Fires for passthrough tools too; filter in the consumer.
+        Strictly observational: exceptions it raises are logged and swallowed,
+        and it cannot change the enforcement outcome. Arguments are passed
+        as-is — truncation/redaction is the consumer's job.
 
     Returns
     -------
@@ -319,6 +329,7 @@ def janus_pretooluse_hook(
 
     async def hook(input_data: dict, tool_use_id: str | None, context: Any) -> dict:
         runtime_name = ""
+        arguments: dict = {}
         try:
             runtime_name = input_data.get("tool_name", "")
             arguments = dict(input_data.get("tool_input") or {})
@@ -337,6 +348,28 @@ def janus_pretooluse_hook(
                 f"internal enforcement error ({type(exc).__name__}: {exc}); "
                 "failing closed"
             )
+        # Observation only, never enforcement: an audit defect must not be able
+        # to flip a decision, so both audit sinks swallow their own errors.
+        if on_decision is not None:
+            try:
+                on_decision(runtime_name, arguments, reason is None, reason)
+            except Exception as exc:
+                logger.warning(
+                    f"on_decision callback error for '{runtime_name}' "
+                    f"({type(exc).__name__}: {exc}); ignoring"
+                )
+        if session is not None and reason is not None:
+            try:
+                session.note(
+                    kind="policy_deny",
+                    tool=resolve_name(runtime_name),
+                    reason=reason,
+                )
+            except Exception as exc:
+                logger.warning(
+                    f"policy_deny session note failed for '{runtime_name}' "
+                    f"({type(exc).__name__}: {exc}); ignoring"
+                )
         if reason is None:
             logger.policy_decision(runtime_name, allowed=True)
             try:
@@ -427,6 +460,7 @@ def janus_hooks(
     taint: TaintTracker | None = None,
     session: Session | None = None,
     hook_approved_tools: set[str] | frozenset[str] | None = None,
+    on_decision: Callable[[str, dict, bool, str | None], None] | None = None,
 ) -> dict:
     """Convenience wrapper: return a ready ``hooks=`` dict for ``ClaudeAgentOptions``.
 
@@ -456,6 +490,12 @@ def janus_hooks(
     ``taint=`` (a bare tracker, taint gating only, raw responses) keeps
     working but is superseded by ``session=``; passing both raises. Use one
     Session/tracker per agent session; ``reset()`` only at session boundaries.
+
+    ``on_decision`` is forwarded to :func:`janus_pretooluse_hook`: an audit
+    callback ``on_decision(runtime_tool_name, arguments, allowed, reason)``
+    invoked once per PreToolUse evaluation (``reason`` is ``None`` on allow).
+    Observational only — its exceptions are logged and swallowed and cannot
+    change the decision.
     """
     try:
         from claude_agent_sdk import HookMatcher
@@ -469,6 +509,7 @@ def janus_hooks(
         policy, required_args=required_args,
         passthrough_tools=passthrough_tools, resolve_name=resolve_name,
         taint=taint, session=session, hook_approved_tools=hook_approved_tools,
+        on_decision=on_decision,
     )
     # The hooks are intentionally typed with broad dict signatures so this module
     # imports without the SDK; they are shape-correct for the SDK's HookCallback.
@@ -531,6 +572,7 @@ def janus_options(
     resolve_name: NameResolver = default_resolve_name,
     passthrough_tools: frozenset[str] = DEFAULT_PASSTHROUGH_TOOLS,
     hook_approved_tools: set[str] | frozenset[str] | None = None,
+    on_decision: Callable[[str, dict, bool, str | None], None] | None = None,
     extra_hooks: dict | None = None,
     unsafe_overrides: bool = False,
     **overrides: Any,
@@ -572,6 +614,11 @@ def janus_options(
         Janus hook then approves them explicitly on allow, so under ``dontAsk``
         the permission layer and the hook must *both* agree before a sink runs
         — a skipped hook means the sink is denied, not silently allowed.
+    on_decision : Callable[[str, dict, bool, str | None], None] | None
+        Audit callback forwarded to the PreToolUse hook, called once per
+        evaluation as ``on_decision(runtime_tool_name, arguments, allowed,
+        reason)`` (``reason`` is ``None`` on allow). Observational only —
+        exceptions are logged and swallowed; it cannot change a decision.
     extra_hooks : dict | None
         Additional ``hooks=`` entries (same shape the SDK takes) merged
         *alongside* the Janus wiring — your matchers are appended after Janus's
@@ -702,6 +749,7 @@ def janus_options(
             taint=taint,
             session=session,
             hook_approved_tools=approved or None,
+            on_decision=on_decision,
         )
         for event, matchers in (extra_hooks or {}).items():
             hooks.setdefault(event, []).extend(matchers)

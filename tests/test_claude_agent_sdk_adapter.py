@@ -226,6 +226,102 @@ def test_hook_approved_tool_gets_explicit_allow():
     assert _denied(_run_hook(hook, "mcp__research__web_search", {"query": "x" * 500}))
 
 
+# --- on_decision audit callback ---------------------------------------------------
+
+
+def test_on_decision_fires_once_on_deny_with_raw_reason():
+    calls = []
+    hook = janus_pretooluse_hook(
+        POLICY, required_args=REQUIRED,
+        on_decision=lambda name, args, allowed, reason: calls.append(
+            (name, args, allowed, reason)
+        ),
+    )
+    out = _run_hook(hook, "mcp__research__fetch_page", {"url": "http://localhost/"})
+    assert _denied(out)
+    assert len(calls) == 1
+    name, args, allowed, reason = calls[0]
+    assert name == "mcp__research__fetch_page"
+    assert args == {"url": "http://localhost/"}
+    assert allowed is False
+    # The callback gets the raw enforcer reason; the hook output prefixes it.
+    assert reason
+    assert not reason.startswith("[Janus]")
+    assert out["hookSpecificOutput"]["permissionDecisionReason"] == (
+        f"[Janus] blocked by policy: {reason}"
+    )
+
+
+def test_on_decision_fires_on_allow_with_none_reason():
+    calls = []
+    hook = janus_pretooluse_hook(
+        POLICY, on_decision=lambda *c: calls.append(c),
+    )
+    assert _run_hook(hook, "mcp__research__web_search", {"query": "hi"}) == {}
+    assert calls == [("mcp__research__web_search", {"query": "hi"}, True, None)]
+
+
+def test_on_decision_fires_for_passthrough_tools():
+    calls = []
+    hook = janus_pretooluse_hook(POLICY, on_decision=lambda *c: calls.append(c))
+    assert _run_hook(hook, "StructuredOutput", {"anything": 1}) == {}
+    assert calls == [("StructuredOutput", {"anything": 1}, True, None)]
+
+
+def test_on_decision_exception_does_not_change_outcome():
+    def boom(name, args, allowed, reason):
+        raise RuntimeError("audit sink is down")
+
+    hook = janus_pretooluse_hook(POLICY, required_args=REQUIRED, on_decision=boom)
+    # Allowed stays allowed
+    assert _run_hook(hook, "mcp__research__web_search", {"query": "hi"}) == {}
+    # Denied stays denied
+    assert _denied(_run_hook(hook, "mcp__research__fetch_page", {"url": "http://localhost/"}))
+
+
+def test_on_decision_fires_on_fail_closed_path():
+    calls = []
+
+    def broken(name: str) -> str:
+        raise RuntimeError("resolver bug")
+
+    hook = janus_pretooluse_hook(
+        POLICY, resolve_name=broken, on_decision=lambda *c: calls.append(c),
+    )
+    out = _run_hook(hook, "mcp__research__web_search", {"query": "hi"})
+    assert _denied(out)
+    assert len(calls) == 1
+    name, args, allowed, reason = calls[0]
+    assert allowed is False
+    assert "failing closed" in reason
+
+
+def test_session_records_policy_deny_event():
+    from janus.policy.session import Session
+
+    session = Session()
+    hook = janus_pretooluse_hook(POLICY, session=session)
+    assert _denied(_run_hook(hook, "mcp__research__read_secret", {}))
+    denies = [e for e in session.events if e.get("kind") == "policy_deny"]
+    assert len(denies) == 1
+    assert denies[0]["tool"] == "read_secret"
+    assert denies[0]["reason"]
+    # Allowed calls add no policy_deny event
+    assert _run_hook(hook, "mcp__research__web_search", {"query": "hi"}) == {}
+    assert len([e for e in session.events if e.get("kind") == "policy_deny"]) == 1
+
+
+def test_janus_hooks_forwards_on_decision():
+    pytest.importorskip("claude_agent_sdk")
+    from janus.adapters.claude_agent_sdk import janus_hooks
+
+    calls = []
+    hooks = janus_hooks(POLICY, on_decision=lambda *c: calls.append(c))
+    hook = hooks["PreToolUse"][0].hooks[0]
+    assert _denied(_run_hook(hook, "mcp__research__read_secret", {}))
+    assert len(calls) == 1 and calls[0][2] is False
+
+
 # --- janus_options(): the locked-down options builder (SDK required) -------------
 
 
