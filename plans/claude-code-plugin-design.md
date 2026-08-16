@@ -1,7 +1,14 @@
 # Janus × Claude Code CLI — hook/plugin integration design
 
-Status: proposal, 2026-08-15. Responds to `plans/claude-code-plugin-prompt.md`. Design
-only — no code here is final API, but every signature is concrete enough to critique.
+Status: **phase 1 implemented, 2026-08-15**; phases 2–4 still proposal. Responds to
+`plans/claude-code-plugin-prompt.md`.
+
+Phase 1 shipped as `janus/adapters/claude_code.py` + `janus/cli/hook.py` (`janus-hook`),
+with `tests/test_claude_code_adapter.py` and `tests/test_claude_code_shim.py`. Sections
+below are annotated **[built]** where code now exists and **[revised]** where building it
+(or re-reading the fixtures) changed the design. Two changes are load-bearing and are
+called out where they belong: gate-mode abstention had a silent-allow hole under
+`bypassPermissions` (§3), and the payload cannot tell us a session is headless (§6).
 CLI facts below are from the Claude Code docs as of 2026-08-15 plus the verified-facts
 block in the handoff prompt; every claim that still needs live verification against an
 installed `claude` CLI is marked **[verify-live]**.
@@ -39,7 +46,7 @@ So the layered table from `plans/claude-agent-sdk-hardening.md` degrades to:
 |---|---|---|
 | does the tool exist? | `tools=[]` + `strict_mcp_config` | **gone** — session is the user's |
 | may it run unprompted? | `allowed_tools` ∩ policy + `dontAsk` | `permissions.deny` (+ managed `allowManagedPermissionRulesOnly`) |
-| may it run with these args? | Janus PreToolUse hook (fails closed on timeout, verified) | Janus PreToolUse hook (**fails open on timeout**, per docs) |
+| may it run with these args? | Janus PreToolUse hook (fails closed on timeout, verified) | Janus PreToolUse hook (**fails open on timeout — verified 2026-08-15, not merely documented**) |
 | runs even if all above lied | `guard_tool_body` | **gone** — tool bodies are the CLI's |
 
 The honest statement, which the docs for this adapter must carry verbatim: **on the CLI,
@@ -90,7 +97,7 @@ Shim ↔ daemon transport: **unix domain socket** at `${CLAUDE_PLUGIN_DATA}/janu
 bind localhost TCP for `http`-hook deployments; that listener is what
 `allowedHttpHookUrls` allowlists.
 
-## 3. Decision 4 first, because everything hangs on it — gate mode vs. default-deny
+## 3. Decision 4 first, because everything hangs on it — gate mode vs. default-deny **[built, revised]**
 
 **Decision: the CLI adapter runs in an explicit, named `mode="gate"` by default: the
 policy names the tools Janus has an opinion about (sources, sinks, argument-conditioned
@@ -120,18 +127,54 @@ Rationale, stated against the invariant it bends:
   calls.* The enforcement-review checklist gains a line item: any change to gate-mode
   abstention semantics is a default-deny-adjacent change.
 
-Mechanically, gate mode is the existing `decide_call` with one wrapper rule: if
-`resolve_name(tool)` has no policy rule, no taint gate, and no required-args entry →
-abstain (`{}`) instead of deny. Taint gates fire in gate mode exactly as in policy mode —
-a gated sink is denied/escalated even though its neighbors abstain. `mode="policy"`
-additionally needs a `passthrough_tools` extension for CLI-internal tool names
-(the CLI analog of `StructuredOutput`; enumerate from a live session, **[verify-live]**).
+**Correction, and it is the sharpest hole in the argument above: abstention is only worth
+what the authority it defers to is worth.** Under `permission_mode="bypassPermissions"`
+nothing downstream will ever ask a human, so `{}` stops meaning "defer" and starts meaning
+*silent allow* — and the injected agent's cheapest move is then a sink Janus has no
+opinion on, which is precisely the long tail gate mode chose not to cover. The same
+collapse hits escalation (§6). This is fixable at zero cost because `permission_mode` is
+on the wire in every `PreToolUse` fixture: **gate mode auto-promotes to `mode="policy"`
+when the payload's `permission_mode` is unsupervised** (`UNSUPERVISED_PERMISSION_MODES`),
+and the promotion is recorded in the audit trail rather than applied silently. Defeatable
+via `strict_when_unsupervised=False`, which is the operator taking the consequence
+explicitly.
+
+Mechanically, gate mode is the existing `decide_call` with one wrapper rule — and the
+rule is on the *deny*, not on the lookup, which matters:
+
+> if `decide_call` denied at `LAYER_RULES` **and** the policy key has no rule at all →
+> abstain (`{}`) instead of deny.
+
+Phrasing it that way (rather than "skip evaluation for unlisted tools") is what makes the
+subtle case come out right: a taint-gated sink that is *not* in the policy still gets its
+gate evaluated — a gate is an opinion — but an untainted session does not then trip over
+default-deny on the way out. Same for a required-args entry on an unlisted tool.
+
+One further wrinkle found while building: an *allow* needs the same treatment for audit
+purposes. An empty or unloaded policy allows everything, so recording that as "Janus
+approved this call" claims a judgement that never happened. `CliDecision` therefore
+reports `ABSTAIN` for an allow of a tool nothing has an opinion about, and `ALLOW` only
+when a rule, gate, required-args entry, or explicit passthrough actually spoke. Both
+render as the same `{}` on the wire; the distinction exists for the trail.
+
+`mode="policy"` additionally needs a `passthrough_tools` extension for CLI-internal tool
+names (the CLI analog of `StructuredOutput`). The fixtures already answer part of this:
+**`ToolSearch` is real and observed on the wire** (`posttoolbatch.top-level.json`) — it
+loads deferred tool *schemas* and executes nothing, so it is the default passthrough set.
+Note it also enumerates tool names, so a deployment that cares about reconnaissance may
+prefer an opinion over a passthrough. Whether other CLI-internal names exist is still
+**[verify-live]**.
 
 ## 4. Decision 2 — session state
 
 **Keying.** One `Session` per `session_id`, held in a daemon-side `SessionRegistry`.
 
-**Subagents.** `agent_id`/`agent_type` arrive in every hook payload. **Decision: subagent
+**Subagents.** `agent_id`/`agent_type` arrive **only** on payloads from inside a subagent
+(absent, not null, at top level) — and the keying decision below is not an assumption but
+a fixture: `pretooluse.agent-spawn.json` (the parent's `Agent` call, no `agent_id`) and
+`pretooluse.subagent-bash.json` (the child's call, `agent_id` present) carry the **same
+`session_id`**. Parent and subagent genuinely collapse onto one key with no parent-pointer
+needed; `agent_id` is what distinguishes them for audit. **Decision: subagent
 tool calls share the parent `session_id`'s Session — taint propagates both directions.**
 Justification: a subagent's output returns into the parent's context (so child taint must
 flow up), and a subagent is spawned from a possibly-tainted parent context (so parent
@@ -140,7 +183,12 @@ a `Task`). Per-source labels make bidirectional sharing cheap: `record_output` e
 carry `agent_id` in their cause dict for audit, so the merged trail still answers *which
 agent* introduced each label. A future refinement (per-agent label namespaces with
 endorsed declassification at `SubagentStop`) is explicitly out of scope — conservative
-first.
+first. Two fixtures mark where that future work attaches: **`SubagentStart`** exists
+(carrying `agent_id`/`agent_type`) and is the natural place to open a namespace, and
+**`posttooluse.agent-result.json`** is the point where the subagent's `content` re-enters
+the parent's turn — under shared-session keying that is a no-op, but it is the
+declassification seam any per-agent scheme has to answer for. Note it carries no
+`agent_id`: from the parent's perspective the `Agent` call is just another tool.
 
 **Lifecycle.** `SessionStart` → `registry.get_or_create(session_id)` (also ensures the
 daemon is up, §8). `SessionEnd` → `registry.end(session_id)` after flushing the audit
@@ -156,12 +204,16 @@ create/evict. The real issue is **ordering**: a `PreToolUse` for call B can be d
 before the `PostToolUse` of concurrent call A is recorded, so B is judged against
 slightly stale taint. Because taint is monotonic and calls in one parallel batch were
 issued from the *same* model turn (the model had not yet seen A's output when it emitted
-B), this is not a laundering channel for outputs-influence-arguments — but it is a real
+B), this is not a laundering channel for outputs-influence-arguments — and that premise is
+**checkable rather than assumed**, because every tool event carries `prompt_id`, which
+identifies the model turn. `CliHookEvent` therefore keeps it. This turns the strict-mode
+rule (c) below from a heuristic into a precise one: a gated sink sharing a `prompt_id`
+with an in-flight source call cannot have been influenced by that call's output. It is a real
 race for "no send after any read" gates across a batch boundary. Mitigations, in order:
 (a) document it; (b) subscribe to `PostToolBatch` and re-check gated sinks at batch
 resolution, downgrading to a logged incident (can't un-run the tool); (c) optional
 strict mode: a `PreToolUse` for a gated sink while any source-listed call is in flight
-(Pre seen, Post not yet) → deny/escalate. Ship (a)+(b) in phase 2, (c) as a knob.
+(Pre seen, Post not yet) → deny/ask. Ship (a)+(b) in phase 2, (c) as a knob.
 
 **Process-boundary survival.** The shim carries no state — every event is forwarded to
 the daemon, so nothing must survive a shim process. What must survive a *daemon* restart
@@ -178,14 +230,39 @@ restartable during live sessions.
 Three distinct failure classes, three answers:
 
 **5.1 Daemon down / unreachable.** The shim's job. Connect timeout 250 ms, one retry,
-then emit `permissionDecision: "deny"` with reason "Janus daemon unreachable — failing
-closed; run `janus-hook doctor`". `PostToolUse` events on daemon-down are spooled to
+then deny — **but not indiscriminately, and this is a revision**. In gate mode most calls
+were going to abstain, so a blanket deny-everything flips a "mostly no opinion" monitor
+into a session that denies `Read` and `TodoWrite`, which is exactly the uninstall pressure
+§3 exists to avoid; a guard that gets uninstalled protects nothing. The shim cannot
+consult the policy to tell the difference (it is stdlib-only in proxy mode), so **the
+daemon writes an interesting-tools manifest** — `interesting_tools()`, already built:
+policy keys ∪ taint sources ∪ taint gates ∪ required-args keys — to the plugin data dir on
+policy load. Unreachable-daemon rule: tool in the manifest → deny; tool absent → abstain;
+manifest missing or unreadable → deny everything (the honest degenerate case). One file
+read, no imports, fail-closed exactly where Janus had an opinion.
+
+Deny reason: "Janus daemon unreachable — failing closed; run `janus-hook doctor`".
+`PostToolUse` events on daemon-down are spooled to
 `${CLAUDE_PLUGIN_DATA}/spool/` and replayed by the daemon on reconnect, so taint is not
-lost while denies are happening. Configurable to `escalate` instead of `deny` for
+lost while denies are happening. Configurable to `ask` instead of `deny` for
 interactive comfort; never configurable to allow.
 
-**5.2 Slow decision vs. CLI hook timeout.** The CLI kills the hook at its timeout and
-proceeds — fail open. Therefore the *shim* enforces an internal deadline (default 5 s,
+**The spool is a taint-laundering primitive, and the threat table owes it a row.** Taint
+is monotonic, so *writing* to the spool can only raise taint (harmless); **deleting**
+spooled events drops taint that would otherwise have gated a later sink. Under same-user
+deployments (settings hooks, user-installed plugin) an agent with `Bash` can do exactly
+that. Mitigations: spool entries carry a monotonic sequence number so the daemon treats a
+gap as a cross-check incident (§5.3) rather than as clean state, and the enterprise shape
+runs `janusd` as its own user with a spool directory the agent user cannot write. Neither
+closes it under same-user deployment; §7's table says so.
+
+**5.2 Slow decision vs. CLI hook timeout. [built, verified]** The CLI kills the hook at
+its timeout and proceeds — fail open, now confirmed rather than assumed: a hook with
+`"timeout": 3` that slept 10s before denying had its deny **discarded and the tool ran**
+(CLI 2.1.233; the same hook denying promptly blocked). The shim therefore carries
+`--deadline` (default 5 s), and it wraps the janus import too — in phase 1's stateless
+mode that import is the slowest thing the shim does, so leaving it outside the budget
+would leave the likeliest stall unguarded. Therefore the *shim* enforces an internal deadline (default 5 s,
 ≪ the hook timeout) and emits a deny on expiry; the CLI-level timeout becomes
 unreachable in practice. We also set an explicit generous `timeout` on our hook entries
 rather than inheriting 600 s, purely to bound pathological cases. Decision latency
@@ -193,8 +270,10 @@ itself is not a risk (§2 budget); this machinery exists for the daemon-wedged c
 
 **5.3 Hook never fires (upstream dispatch regression — the #6305/#10814 class).**
 Nothing hook-side can prevent this; two compensations:
-- **Detection:** the daemon asserts every `tool_use_id` seen at `PostToolUse` was
-  decided at `PreToolUse` (the SDK plan's follow-up 2, but implemented here first since
+- **Detection:** the daemon asserts every `tool_use_id` seen at `PostToolUse` **or
+  `PostToolUseFailure`** was decided at `PreToolUse` — a failed call emits only the
+  latter (verified; it carries `error` and no `tool_response`), so a cross-check watching
+  `PostToolUse` alone would never see failures at all (the SDK plan's follow-up 2, but implemented here first since
   the daemon makes it trivial). On a miss: error-level audit event, `systemMessage` to
   the user on the next decision, and optional deny-all-for-session.
 - **Backstop `permissions.deny`:** the plugin cannot install permission rules
@@ -209,11 +288,41 @@ the next `PostToolUse`, calls not covered by `permissions.deny` run unenforced. 
 CLI seam this window cannot be closed, only shrunk and alarmed. Deployments that cannot
 accept it should use the SDK path, which is why `janus_options()` remains the flagship.
 
-## 6. Decision 5 — `escalate`
+## 6. Decision 5 — escalation **[built, and the wire value was wrong]**
 
-**Decision: taint-gate hits default to `escalate`; static policy denies stay `deny`.
-API: `on_gate="escalate" | "deny"` with a per-tool override map, and an automatic
-downgrade escalate→deny when the session cannot ask a human.**
+**Decision: taint-gate hits default to escalation; static policy denies stay `deny`.
+API: `on_gate="ask" | "deny"` with a per-tool override map, and an automatic
+downgrade ask→deny when the session cannot ask a human.**
+
+> **The original draft said `escalate`, and that would have shipped a taint gate
+> that silently allowed every hit.** Probed live on CLI 2.1.233 by emitting each
+> candidate value from a real `PreToolUse` hook and using *"did `PostToolUse`
+> fire"* as the oracle for whether the tool ran:
+>
+> | emitted `permissionDecision` | `claude -p` | `--dangerously-skip-permissions` |
+> |---|---|---|
+> | `deny` | blocked | blocked |
+> | `ask` | blocked, reason reached the model | blocked |
+> | `escalate` | **ran** | — |
+> | `totally-bogus-value` | **ran** | — |
+>
+> `escalate` is indistinguishable from a misspelling: an unrecognized decision
+> does not error, it falls through and the tool executes. **`ask` is the CLI's
+> actual vocabulary.** This is the single most valuable thing the live probe
+> bought, and it is exactly the class of error that reading docs cannot catch —
+> the SDK-path experiment found the docs wrong once before.
+>
+> The same probe settled a second question the design had assumed: **hooks are
+> honored under `bypassPermissions`** — both `deny` and `ask` still block there.
+> So §3's promotion rule is not about hooks being ignored; it is specifically
+> about *abstention*, which is not a decision at all and therefore cannot win.
+> That distinction is now the rule's stated rationale.
+>
+> Consequence for the downgrade rule: since `ask` was verified to block headless
+> *and* under bypass, the ask→deny downgrade is **defense in depth against
+> upstream drift, not a live necessity**. It is kept — a plain deny needs no
+> downstream authority whatsoever — but the design should stop claiming it is
+> load-bearing.
 
 Reasoning: a taint gate firing means "consequential action after untrusted input" —
 exactly Rule of Two's *human supervises*; the human approving at the CLI prompt **is**
@@ -223,8 +332,16 @@ the out-of-band approval the gate's deny message asks for, with the
 denies are different in kind — the operator already decided those calls are wrong; a
 prompt would just train click-through. Downgrade rule: payload `permission_mode` of
 `bypassPermissions`, or headless invocation, means no meaningful prompt — emit `deny`
-**[verify-live: what `escalate` does in `claude -p` and under each permission_mode]**.
-An escalate that the human approves is recorded via the existing endorsement path
+**[RESOLVED 2026-08-15 — see the table above.]**
+
+**Half that rule had no input, and the fixtures are how we know.** The capture ran under
+`claude -p` and reports `permission_mode: "default"`, identical to an interactive session;
+there is no `-p` signal anywhere in the payload. So "headless" cannot be *detected*, only
+*declared* — the shim takes an explicit `--headless` flag, fixed into the argv contract in
+phase 1 rather than discovered in phase 4, and a non-interactive deployment that forgets
+it gets escalations nobody can answer. `bypassPermissions` remains detectable and is
+handled from the payload.
+An escalation that the human approves is recorded via the existing endorsement path
 (`session.endorse_event(audit_id, by="cli-user", …)`) driven from the
 `PermissionRequest`/`PermissionDenied` events **[verify-live: payload contents suffice
 to correlate]** — the audit trail then shows deny → human endorsement → allow.
@@ -245,7 +362,8 @@ What the injected agent can and cannot do, per deployment shape:
 | Disarm the guard **this session** by editing settings | **yes** — settings hooks are re-read from disk, not snapshotted; one `Edit` of `~/.claude/settings.json` removes the hook mid-session | no — plugin hooks are snapshotted per session | no |
 | Disarm for **future** sessions (edit settings, disable plugin, `--plugin-dir` shadow) | yes | yes | no — `allowManagedHooksOnly` + managed force-enabled `enabledPlugins`; `--plugin-dir` cannot override |
 | Tamper with daemon state (reset taint via socket) | possible if it can run code touching the socket — which is itself a policy-gated action (`Bash`); mutation endpoints additionally require the per-boot token in the 0600 socket dir | same | same, and enterprise runs `janusd` as a separate service user, closing the same-user hole |
-| Exfiltrate via a tool Janus has no opinion on (gate mode) | falls through to the CLI permission flow / human | same | same, plus managed `permissions.deny` backstop |
+| Launder taint by deleting the daemon-down spool | **yes**, if it can run code (itself policy-gated); sequence gaps are detected, not prevented | same | no — spool dir owned by the `janusd` user |
+| Exfiltrate via a tool Janus has no opinion on (gate mode) | falls through to the CLI permission flow / human — **except** under `bypassPermissions`, where gate mode promotes to default-deny (§3) because there is no human to fall through to | same | same, plus managed `permissions.deny` backstop |
 
 Two hard conclusions the docs must state:
 1. **Settings-file hook delivery is not a security boundary against the agent it
@@ -261,27 +379,29 @@ Two hard conclusions the docs must state:
    enterprise guidance — a managed-settings deployment that silently loads no hooks
    must be caught by our own smoke test, not a customer.]**
 
-## 8. Decision 6 + 7 — public API surface and bootstrap
+## 8. Decision 6 + 7 — public API surface and bootstrap **[built, revised]**
 
 New module **`janus/adapters/claude_code.py`** — core-install only, stdlib + existing
-core deps, importable without any extra:
+core deps, importable without any extra (pinned by `tests/test_import_hygiene.py`):
 
 ```python
 @dataclass(frozen=True)
 class CliHookEvent:
     event: str                      # hook_event_name
-    session_id: str
-    tool_name: str
+    session_id: str | None
+    tool_name: str | None           # None on lifecycle events and batch envelopes
     tool_input: dict
     tool_output: Any | None         # PostToolUse only
     tool_use_id: str | None
-    agent_id: str | None
+    agent_id: str | None            # subagent payloads only
     agent_type: str | None
     permission_mode: str | None
+    prompt_id: str | None           # the model turn — see §4's ordering argument
     cwd: str | None
+    in_batch: bool                  # fanned out of a PostToolBatch envelope
     raw: dict                       # untouched payload, for audit
 
-def normalize_cli_event(payload: dict) -> CliHookEvent
+def normalize_cli_event(payload: Mapping) -> CliHookEvent
     # THE load-bearing function. Reads `tool_response` OR `tool_output`,
     # whichever is present (live CLI 2.1.233 sends `tool_response`; the docs
     # say `tool_output` — see the fixtures README), so one normalizer serves
@@ -289,6 +409,14 @@ def normalize_cli_event(payload: dict) -> CliHookEvent
     # Unknown/missing keys -> None, never KeyError (the decision path fails
     # closed on exceptions, but a payload-shape drift must surface in the
     # cross-check and payload-pin tests, not as a blanket deny of everything).
+
+def normalize_cli_events(payload: Mapping) -> list[CliHookEvent]
+    # REVISION: the original single-event signature could not represent
+    # PostToolBatch at all — that envelope has NO `tool_name`, only a
+    # `tool_calls` array — while §4(b) and §5.3 both subscribe to it. Fans the
+    # envelope out to one event per call (each inheriting session/agent/turn
+    # fields, each flagged `in_batch`, each keeping the envelope as `raw`);
+    # every other payload yields a single-element list.
 
 def claude_code_resolve_name(name: str, *, known_servers: Collection[str] | None = None) -> str
     # Handles both `mcp__<server>__<tool>` and `mcp__plugin_<plugin>_<server>__<tool>`;
@@ -298,33 +426,75 @@ def claude_code_resolve_name(name: str, *, known_servers: Collection[str] | None
     # there is no strict_mcp_config upstream to close the leak at the source).
 
 DEFAULT_CLI_SINK_DENY: dict  # the documented permissions.deny backstop block (§5.3), as data
+DEFAULT_CLI_PASSTHROUGH_TOOLS = frozenset({"ToolSearch"})     # CLI-internal transport (§3)
+UNSUPERVISED_PERMISSION_MODES = frozenset({"bypassPermissions"})
+ALLOW, DENY, ASK, ABSTAIN = "allow", "deny", "ask", "abstain"  # ASK is the wire value — §6
+UNKNOWN_MCP_SERVER: str      # sentinel for an unsanctioned mcp__ server; matches no policy key
 
+@dataclass(frozen=True)
+class CliDecision:                  # REVISION: replaces the SDK's (allowed: bool, reason)
+    decision: str                   # "allow" | "deny" | "ask" | "abstain"
+    policy_key: str
+    mode: str                       # the EFFECTIVE mode, after any promotion
+    reason: str | None
+    layer: str | None               # which decide_call layer spoke
+    override: str | None            # promotion / downgrade, if this seam changed the outcome
+    def to_hook_output(self) -> dict
+
+def evaluate_cli_event(...) -> CliDecision     # structured core
 def decide_cli_event(
     event: CliHookEvent,
     enforcer: PolicyEnforcer,
     *,
     session: Session | None = None,
+    taint: TaintTracker | None = None,
     mode: Literal["gate", "policy"] = "gate",
-    on_gate: Literal["escalate", "deny"] = "escalate",
-    gate_overrides: dict[str, str] | None = None,     # {tool: "deny"|"escalate"}
+    on_gate: Literal["ask", "deny"] = "ask",          # "ask" is the CLI's value — §6
+    gate_overrides: dict[str, str] | None = None,     # {tool: "deny"|"ask"}
     required_args: RequiredArgs | None = None,
-    passthrough_tools: frozenset[str] = ...,
+    passthrough_tools: Collection[str] = DEFAULT_CLI_PASSTHROUGH_TOOLS,
     resolve_name: NameResolver = claude_code_resolve_name,
-    on_decision: OnDecision | None = None,            # same shape as the SDK adapter's
-) -> dict   # ready-to-print CLI hook JSON, or {} for abstain / PostToolUse record
+    headless: bool = False,                           # cannot be detected — see §6
+    strict_when_unsupervised: bool = True,            # the §3 promotion
+    on_decision: OnDecision | None = None,            # (event, CliDecision) -> None
+) -> dict   # ready-to-print CLI hook JSON, or {} for abstain/allow
+
+def record_cli_event(event, session, *, resolve_name=..., unwrap=unwrap_cli_response)
+def handle_cli_payload(payload, policy, *, session=None, **kw) -> dict   # the shim's entry
+def interesting_tools(enforcer, *, taint=None, required_args=None) -> frozenset[str]  # §5.1
+def cli_name_resolver(known_servers) -> NameResolver   # binds known_servers for decide_call
 ```
 
 `decide_cli_event` delegates to **`decide_call` — `_decide` is not duplicated**; the new
 logic is only: gate-mode abstention (§3), `Decision.layer == LAYER_TAINT` →
-escalate-vs-deny mapping (§6), and `hookSpecificOutput` serialization (identical bytes
-to `janus_pretooluse_hook`'s deny, plus the `escalate` variant). `PostToolUse` events
-route to `session.record_output(policy_key, tool_output)`. Output shapes are now
-pinned (fixtures, CLI 2.1.233): built-ins return dicts (`Bash`:
-`stdout`/`stderr`/…; `Read`: `type`/`file`), but an MCP tool's `tool_response` is a
-**raw JSON string** — which the SDK's `unwrap_tool_response` passes through unparsed
-(it only unwraps content blocks). The CLI adapter therefore gets its own
-`unwrap_cli_response`: try `json.loads` on a bare string, delegate block shapes to the
-SDK unwrapper, else return unchanged — with the fixture files as its test inputs.
+ask-vs-deny mapping (§6), and `hookSpecificOutput` serialization (identical bytes
+to `janus_pretooluse_hook`'s deny, plus the `ask` variant). `PostToolUse` events
+route to `session.record_output(policy_key, tool_output)`.
+
+**`on_decision` deviates from the SDK adapter's shape deliberately.** The SDK's
+`(tool, args, allowed: bool, reason)` cannot express four outcomes: a boolean conflates
+"denied" with "asked the human", and an audit trail that conflates them is useless for
+exactly the events worth reviewing. The CLI callback takes `(CliHookEvent, CliDecision)`.
+For the same reason `decide_cli_event` writes a `cli_decision` session note whenever the
+outcome was an escalation or this seam *changed* the outcome (promotion, downgrade) —
+the taint tracker records the gate denial, but nothing else records what the seam then
+did with it. Plain rules denies keep the SDK's `policy_deny` note shape.
+
+Output shapes are pinned (fixtures, CLI 2.1.233), and there are **three dialects, not
+two**: built-ins in `PostToolUse` return dicts (`Bash`: `stdout`/`stderr`/…; `Read`:
+`type`/`file`); an MCP tool's `tool_response` is a **raw JSON string** (which the SDK's
+`unwrap_tool_response` passes through unparsed — it only knows content blocks); and *the
+same built-in calls inside a `PostToolBatch`* come back as **plain strings** (`Read` → the
+numbered file text), with `ToolSearch` returning a block list. `unwrap_cli_response`
+handles all three, and parses a string only when it *looks* like JSON (leading `{`/`[`) so
+that `"hello-janus"` stays a string and `"123"` does not silently become an int under a
+content-aware taint classifier.
+
+That dialect split forces a decision the original design left implicit: **`PostToolUse` is
+the recording seam and `PostToolBatch` is not.** Recording both would double-count events
+and hand classifiers different bytes for the same call. The batch event exists for the
+§5.3 cross-check — for which it is in fact the better source, since it carries per-call
+`tool_use_id`s in one message.
 
 **`janus/registry.py`** (name bikesheddable): `SessionRegistry` —
 `get_or_create(session_id) -> Session`, `end(session_id)`, TTL sweep, snapshot/restore
@@ -349,11 +519,27 @@ sources/gates, on_gate, audit dir.
   Do not contort the phase-1 shim to avoid the import; do not let a janus import creep
   into the proxy hot path.
   Config plumbing, fixed now so phase 3 doesn't have to break it: explicit argv flags on
-  the hook command — `janus-hook pre --policy <path> --mode gate --on-gate escalate`
-  (plus `--socket <path>` in proxy mode). Phase 3's `userConfig` values slot into the
-  same flags via exec-form `args`; no env vars, no fixed-path config file on the shim
-  side (the daemon keeps its own config file, §8 above).
+  the hook command — `janus-hook pre --policy <path> --mode gate --on-gate ask
+  [--headless] [--config <sidecar.json>]` (plus `--socket <path>` in proxy mode). Phase
+  3's `userConfig` values slot into the same flags via exec-form `args`; no env vars, no
+  fixed-path config file on the shim side (the daemon keeps its own config file, §8
+  above). `--policy` is **required**: an enforcer with no policy loaded allows
+  everything, so a shim wired without it is a guard that reports for duty and watches
+  nothing. argparse exits 2 on a missing flag, which is the CLI's *blocking* hook error —
+  even the misconfiguration fails closed.
+  Two more subcommands landed: `backstop` (prints `DEFAULT_CLI_SINK_DENY` as a
+  paste-ready settings block) and the `doctor` self-test.
 - `janusd` — run the daemon.
+
+**Building the shim surfaced a failure mode the design missed entirely, and it is worth
+recording because it generalizes to any `command` hook: stdout is the protocol channel.**
+The CLI parses the hook's stdout as JSON, so a single stray line corrupts the decision
+into unparseable bytes — which the CLI treats as a *non-blocking* hook error. A deny that
+logs itself to stdout is therefore an allow. `janus.logger.configure_logging()` installs a
+`StreamHandler` on stdout and a deny logs at WARNING, so this is not hypothetical. The
+shim isolates stdout before doing any work, and it takes two mechanisms: reassigning
+`sys.stdout` covers `print()` (which resolves it per call), while a `StreamHandler`
+captured the stream object at install time and has to be repointed explicitly.
 
 **Bootstrap (decision 7).** The shim being stdlib-only splits the problem: hooks need
 only *a* Python; the daemon needs janus-guard installed once. **Decision: the plugin's
@@ -403,15 +589,27 @@ A security plugin that can be spoofed or silently downgraded is negative-value, 
   2.1.233: `tests/fixtures/claude_code_payloads/`** (Pre/PostToolUse for built-in,
   MCP, and in-subagent calls; `Agent` spawn/result; PostToolBatch; lifecycle events) —
   its README records provenance, the doc-contradicting findings, and the gaps still to
-  capture (plugin-MCP names, PostToolUseFailure, PermissionRequest/Denied, PreCompact,
-  non-default permission modes).
+  capture. Added 2026-08-15: `pretooluse.bypass-permissions.json` and
+  `posttooluse-failure.bash.json`. Still open: plugin-MCP names,
+  PermissionRequest/Denied, PreCompact, interactive (non `-p`) sessions.
 - Normalizer: `tool_output` read, `tool_response` fallback, both-absent → recorded as
-  no-output (and the cross-check still marks the id seen).
+  no-output (and the cross-check still marks the id seen). **[built]**
+- `PostToolBatch` fan-out; the three output dialects; strings parsed only when they look
+  like JSON. **[built]**
 - Gate-mode semantics: unlisted tool → `{}`; listed tool → enforced; taint-gated sink →
-  escalate/deny per `on_gate` + overrides + downgrade rule; `mode="policy"` →
-  default-deny preserved (this is the enforcement-review line item).
+  ask/deny per `on_gate` + overrides + downgrade rule; `mode="policy"` →
+  default-deny preserved (this is the enforcement-review line item). Plus the two cases
+  the design originally missed: **promotion to policy mode under `bypassPermissions`**,
+  and a **gated-but-unlisted sink** that must gate without then default-denying. **[built]**
 - Resolver: both mcp name grammars; unknown-server sentinel never matches a policy key.
-- Escalate/deny JSON byte-shapes; exception in decision path → deny (fail closed).
+  **[built]**
+- Escalate/deny JSON byte-shapes; exception in decision path → deny (fail closed); an
+  `on_decision` that raises cannot flip the outcome. **[built]**
+- Audit: escalations and seam overrides are reconstructable from `session.events`;
+  abstentions add no noise. **[built]**
+- Shim: stdout carries only hook JSON even with logging configured onto stdout; missing
+  `--policy` exits 2; unreadable payload/policy/config → deny; non-`pre` seams stay
+  silent rather than emitting a meaningless `PreToolUse` deny. **[built]**
 - `SessionRegistry`: lifecycle, TTL eviction with flush, concurrent get_or_create,
   snapshot/restore round-trip preserving events/first-cause/seq.
 - `janusd` via FastAPI TestClient: dispatch, cross-check miss detection, admin auth.
@@ -427,27 +625,40 @@ the CLI-side contract on a pinned CLI version, results logged in this doc's tabl
 2. PreToolUse deny JSON is honored (denied tool did not run); reason reaches the model.
 3. PostToolUse fires with `tool_output` for an executed call; taint recorded end-to-end
    (fetch-then-gated-sink scenario denies).
-4. `escalate` behavior headless and interactive-simulated **[verify-live gap closes here]**.
-5. `JANUS_SMOKE_SLOW=1`: hook exceeding its timeout → observe whether the tool ran
-   (documented fail-open confirmed or refuted on the pinned version — the SDK-path
-   experiment found docs wrong once; do not assume either way).
+4. ~~`escalate` behavior headless~~ **DONE 2026-08-15 — see §6's table; `escalate` was
+   not a real value, `ask` is.** Remaining: `ask` in a genuinely interactive session.
+5. ~~`JANUS_SMOKE_SLOW=1`: hook exceeding its timeout~~ **DONE 2026-08-15 — fail-open
+   CONFIRMED on 2.1.233** (`timeout: 3` + 10 s sleep ⇒ deny discarded, tool ran). Worth
+   automating anyway, since this is the assumption `--deadline` exists to defend.
 6. Managed-settings experiment (root required, opt-in env guard): force-enabled plugin
    hooks fire under `allowManagedHooksOnly`; inline managed hooks — do they load (#33824)?
 
 | Date | CLI | Result |
 |---|---|---|
-| — | — | no verified runs yet |
+| 2026-08-15 | 2.1.233 | **Hook timeout fails open** (smoke 5): `timeout: 3` + 10 s sleep ⇒ the deny was discarded and the tool ran; prompt deny blocked. **`PostToolUseFailure` replaces `PostToolUse`** for a failed call, with `error` and no `tool_response` — fixture captured. |
+| 2026-08-15 | 2.1.233 | **Decision vocabulary probed** (§6 table): `deny` and `ask` block in both `claude -p` and `--dangerously-skip-permissions`; `escalate` runs the tool, identically to a bogus string. Hooks are honored under `bypassPermissions`. `pretooluse.bypass-permissions.json` captured. Smoke items 2 and 4 covered by hand; not yet automated. |
 
 ## 11. Phased implementation plan
 
-**Phase 1 — adapter core (one commit).** `janus/adapters/claude_code.py`
-(`CliHookEvent`, `normalize_cli_event`, `claude_code_resolve_name`, `decide_cli_event`
-in gate + policy modes, escalate mapping), `janus-hook` in stateless mode (policy file
-read per call via the argv-flag contract in §8 — no daemon, no taint; imports janus,
-unlike the phase-2 proxy hot path; documented as degraded), `[project.scripts]`
-entry, offline tests including hand-captured pinned-payload fixtures, `docs/adapters.md`
-section with the §1 honesty table. Independently useful: settings-file hook enforcement
-of a static policy, today.
+**Phase 1 — adapter core. [DONE 2026-08-15]** `janus/adapters/claude_code.py`
+(`CliHookEvent`, `normalize_cli_event`/`normalize_cli_events`, `unwrap_cli_response`,
+`claude_code_resolve_name`/`cli_name_resolver`, `evaluate_cli_event`/`decide_cli_event`
+in gate + policy modes with the ask mapping and the unsupervised promotion,
+`record_cli_event`, `handle_cli_payload`, `interesting_tools`), `janus/cli/hook.py`
+(`janus-hook` in stateless mode — policy file read per call via the argv-flag contract in
+§8; no daemon, no taint; imports janus, unlike the phase-2 proxy hot path; documented as
+degraded), its `--deadline` watchdog and stdout isolation, the `[project.scripts]` entry,
+two read-only core accessors
+(`PolicyEnforcer.tool_names`, `TaintTracker.source_tools`/`gated_tools`), offline tests
+driven by the pinned fixtures, and the `docs/adapters.md` section carrying the §1 honesty
+table verbatim. Independently useful: settings-file hook enforcement of a static policy,
+today.
+
+Four things phase 1 learned that the design had wrong or missing, all from running the
+thing rather than reading about it — recorded here because each was a silent-allow:
+`escalate` is not a CLI decision value (§6); the CLI's hook timeout really does fail open,
+so the shim needs its own deadline (§5.2); a hook's own log line on stdout corrupts the
+decision into an allow (§8); and a shim wired without `--policy` enforces nothing at all.
 
 **Phase 2 — the daemon.** `SessionRegistry`, `TaintTracker/Session.snapshot()/restore()`
 (core), `janus/hookd.py` + `janusd`, shim proxy mode with fail-closed + spool,
@@ -458,7 +669,7 @@ pinning automated).
 SessionStart bootstrap + `doctor`, marketplace-in-repo, `claude plugin validate
 --strict` in CI, release-skill version-bump check.
 
-**Phase 4 — enterprise + escalate polish.** Managed-settings verification (smoke #6),
+**Phase 4 — enterprise + escalation polish.** Managed-settings verification (smoke #6),
 documented enterprise block, endorsement-on-approval wiring from
 `PermissionRequest`/`PermissionDenied`, `permissions.deny` backstop doc block finalized
 against real deployments.
@@ -477,11 +688,28 @@ and MCP tools (was item 3 — plugin-MCP shapes still open), the `tool_response`
 `tool_output` key question, `Agent`-not-`Task` spawn naming, subagent-only
 `agent_id`/`agent_type`, and `PostToolBatch` firing with a `tool_calls` array.
 
-Still open **[verify-live]**, in priority order: (1) http-hook behavior on
-connection-refused; (2) `escalate` semantics headless and per permission_mode; (3)
+Resolved by re-reading those same fixtures while building phase 1 — all of these were
+sitting in the captured bytes and the first draft simply did not look:
+
+- **`PostToolBatch` responses are a third dialect**, differing from `PostToolUse` for the
+  identical call (`Read`: dict vs. plain string). Forced the recording-seam decision (§8).
+- **`ToolSearch` is a real CLI-internal tool** on the wire — the first concrete answer to
+  old item 7, and the default passthrough set.
+- **`prompt_id` is on every tool event**, which makes §4's same-turn ordering argument
+  checkable instead of assumed.
+- **`claude -p` reports `permission_mode: "default"`** — headless is undetectable from the
+  payload (§6), which is why `--headless` exists.
+- **`SubagentStart` exists**, and the `Agent` result is its own re-entry point for
+  subagent output into the parent turn (§4).
+
+Still open **[verify-live]** — note that none of these block phase 1; (1) and the
+managed-settings items are phase 2/4 gates, and the rest need a TTY or an installed
+plugin. In priority order: (1) http-hook behavior on
+connection-refused; (2) `ask` in a genuinely *interactive* session (headless and
+bypassPermissions are now verified — §6); (3)
 plugin-MCP tool-name grammar and output shapes on the wire; (4) hook-timeout
 fail-open confirmation on the pinned CLI; (5) managed-settings inline-hooks loading
 (#33824 stale-closed) and force-enabled-plugin exception; (6) whether plugin.json truly
-has no permissions surface; (7) CLI-internal tool names needing passthrough in
-`mode="policy"`; (8) `PermissionRequest`/`PermissionDenied` payloads sufficing to
-correlate an approval back to a specific escalated `tool_use_id`.
+has no permissions surface; (7) whether any CLI-internal tool *besides* `ToolSearch`
+needs passthrough in `mode="policy"`; (8) `PermissionRequest`/`PermissionDenied` payloads
+sufficing to correlate an approval back to a specific escalated `tool_use_id`.

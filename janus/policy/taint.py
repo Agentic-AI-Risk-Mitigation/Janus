@@ -184,6 +184,16 @@ class TaintTracker:
     # ------------------------------------------------------------------
 
     @property
+    def source_tools(self) -> frozenset[str]:
+        """Tool names whose output taints the session (configuration, not state)."""
+        return frozenset(self._sources)
+
+    @property
+    def gated_tools(self) -> frozenset[str]:
+        """Tool names that can be denied by taint (configuration, not state)."""
+        return frozenset(self._gates)
+
+    @property
     def tainted_by(self) -> frozenset[str]:
         """The set of source labels that have tainted this session."""
         with self._lock:

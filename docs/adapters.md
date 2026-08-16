@@ -11,6 +11,7 @@ a dict, a `PolicyEnforcer` instance, or `None`.
 | LangChain | `janus.adapters.langchain` | `langchain` | Guarded `StructuredTool` handlers |
 | Google ADK (Gemini) | `janus.adapters.adk` | `adk` | Guarded function-call handlers |
 | Claude Agent SDK (Claude Code) | `janus.adapters.claude_agent_sdk` | `claude` | SDK `PreToolUse` hook / `can_use_tool` |
+| Claude Code CLI (interactive) | `janus.adapters.claude_code` | — (core) | CLI `PreToolUse` / `PostToolUse` hooks |
 
 Full, copy-pasteable usage for LangChain and ADK is in the
 [README](https://github.com/Agentic-AI-Risk-Mitigation/Janus#framework-adapters). This page
@@ -189,3 +190,140 @@ guarded = guard_tool_body("fetch_page", my_async_body, TOOL_POLICY,
 ```
 
 A runnable end-to-end example is in `examples/claude_agent_sdk_demo.py`.
+
+## Claude Code CLI (interactive `claude`)
+
+`janus.adapters.claude_code` targets the **interactive CLI**, not the SDK. It needs no extra —
+it is core-install only, because a hook has to run wherever `claude` runs.
+
+### What you get, and what you don't
+
+Read this before deploying it, because the security model is genuinely weaker than the SDK
+path's and pretending otherwise is worse than not shipping it:
+
+> **On the CLI, Janus is a policy monitor over a session it does not own, backstopped by
+> `permissions.deny`. It is not a reachability lockdown.**
+
+`janus_options()` works because Janus *constructs* the SDK session — no built-in tools, no MCP
+leakage, `allowed_tools` = policy ∩ mounted. On the interactive CLI the human constructs the
+session, so that layer is simply gone:
+
+| Layer | SDK path | CLI path |
+|---|---|---|
+| does the tool exist? | `tools=[]` + `strict_mcp_config` | **gone** — the session is the user's |
+| may it run unprompted? | `allowed_tools` ∩ policy + `dontAsk` | `permissions.deny` (+ managed settings) |
+| may it run with these args? | Janus `PreToolUse` hook (fails closed on timeout) | Janus `PreToolUse` hook (CLI dispatch fails **open** on timeout) |
+| runs even if all above lied | `guard_tool_body()` | **gone** — tool bodies are the CLI's |
+
+Two consequences worth internalizing. First, the `permissions.deny` backstop is not optional
+decoration: it is the only layer that holds with zero hooks running, which is exactly the
+failure mode upstream hook-dispatch regressions produce. Print it with `janus-hook backstop`
+and paste it into your settings. Second, settings-file hook delivery is **not a security
+boundary against the agent it guards** — settings are re-read from disk, so one `Edit` of
+`~/.claude/settings.json` disarms the guard mid-session. That is fine for evaluation and for
+catching accidents; a plugin (hooks are snapshotted per session) is the minimum for "the
+session I started stays guarded", and managed settings are the minimum for "the machine stays
+guarded". Those ship in later phases.
+
+### Gate mode vs. policy mode
+
+`mode="gate"` (default) has Janus enforce the tools it has an opinion about — policy rules,
+taint gates, required-args entries — and return `{}` for everything else. `{}` is *not* a
+silent allow: it means "no opinion, fall through to the CLI permission flow and the human".
+That downstream authority is what makes abstention defensible here and not on the SDK seam,
+where default-deny remains correct.
+
+`mode="policy"` is strict default-deny, identical to the library and SDK paths. Use it for
+headless and managed deployments, where the tool surface is known and no human is watching.
+
+**Abstention is only as good as the authority it defers to.** Under
+`permission_mode="bypassPermissions"` nothing will ever ask a human, so abstention degrades
+to a real silent allow. Gate mode therefore auto-promotes to policy mode under those modes.
+Note this is specifically about *abstention*, not about hooks losing: a hook `deny` and a
+hook `ask` were both verified to still block under `--dangerously-skip-permissions`. An
+abstention just isn't a decision, so there is nothing for the CLI to honor.
+
+Note also that the payload cannot tell you a session is headless — a `claude -p` run reports
+`permission_mode: "default"` exactly like an interactive one — so pass `--headless` when wiring
+hooks into a non-interactive deployment.
+
+### Escalation uses `ask`, and the spelling matters
+
+A taint-gate hit resolves to the CLI's `ask` decision: the call is blocked and the Janus
+reason (including its `(audit id …)` suffix) is surfaced, so a human's approval is informed.
+Static policy denies stay `deny` — the operator already decided those calls are wrong, and
+prompting would only train click-through.
+
+`ask` is not an arbitrary choice of word. Probed against CLI 2.1.233, an **unrecognized**
+`permissionDecision` does not raise an error — the hook output is ignored and the tool
+runs. `escalate`, which reads like the natural name, behaves exactly like a misspelling:
+
+| emitted decision | `claude -p` | `--dangerously-skip-permissions` |
+|---|---|---|
+| `deny` | blocked | blocked |
+| `ask` | blocked, reason reached the model | blocked |
+| `escalate` | **ran** | — |
+| `totally-bogus-value` | **ran** | — |
+
+A gate emitting `escalate` would have silently allowed every hit — the worst available
+failure for the mechanism whose whole job is stopping consequential actions after untrusted
+input. If you extend the decision vocabulary, re-run that experiment rather than trusting a
+doc.
+
+### Wiring it (phase 1: settings file, stateless)
+
+```bash
+janus-hook backstop > /tmp/backstop.json   # the permissions.deny block; merge into settings
+```
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      { "hooks": [{ "type": "command",
+                    "command": "janus-hook pre --policy /etc/janus/policy.json --mode gate" }] }
+    ]
+  }
+}
+```
+
+The shim reads the payload on stdin and prints the CLI's hook JSON. It fails **closed**: an
+unreachable policy file, an unparseable payload, or a bug inside Janus all produce a deny,
+because the CLI's own dispatch failure mode is to proceed. `janus-hook doctor` self-tests the
+install.
+
+It also owns a `--deadline` (default 5s), and that is not belt-and-braces. The CLI's hook
+timeout was verified to fail open on 2.1.233 — a hook configured with `"timeout": 3` that
+slept 10s before denying had its deny **discarded and the tool ran**. Whatever stalls (a
+policy file on a hung mount, a pathological condition regex, the janus import itself), the
+shim has to hit its own limit first and deny while it still can. Keep `--deadline` well
+under whatever `timeout` you set on the hook entry.
+
+Phase 1 is deliberately the **degraded mode**: there is no daemon, so the shim holds no
+cross-call state — static policy evaluation only, with no taint, no provenance, and no
+`PreToolUse`/`PostToolUse` cross-check. It is genuinely useful (argument-level enforcement of a
+static policy, today) and it is not the recommended deployment. Configuration arrives as
+explicit argv flags rather than env vars so that a plugin's `userConfig` can slot into
+exec-form `args` unchanged later.
+
+### Using the adapter directly
+
+```python
+from janus.adapters.claude_code import handle_cli_payload, normalize_cli_event, decide_cli_event
+
+output = handle_cli_payload(payload, "policy.json", mode="gate", session=session)
+```
+
+`normalize_cli_event` is the load-bearing piece: it reads `tool_response` **or** `tool_output`
+(CLI 2.1.233 sends the former, the docs say the latter), never raises on shape drift, and keeps
+the untouched payload in `.raw` for audit. `normalize_cli_events` additionally fans out a
+`PostToolBatch` envelope, which carries a `tool_calls` array and no `tool_name` at all. Every
+one of these behaviours is pinned by verbatim payload captures in
+`tests/fixtures/claude_code_payloads/` — where the fixtures and the docs disagree, the fixtures
+win.
+
+`claude_code_resolve_name(name, known_servers=...)` maps `mcp__<server>__<tool>` (and the
+plugin form `mcp__plugin_<plugin>_<server>__<tool>`) to the bare policy key. Supply
+`known_servers`: the CLI has no `strict_mcp_config`, so an unsanctioned server would otherwise
+inherit an allow rule written for a same-named tool elsewhere. Unknown servers resolve to a
+reserved sentinel that no policy key can match.

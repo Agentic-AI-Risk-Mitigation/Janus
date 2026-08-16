@@ -83,6 +83,11 @@ docs = [
     "mkdocs-mermaid2-plugin>=0.7.0",
 ]
 
+[project.scripts]
+# The Claude Code CLI hook shim. Core-install only: it must run wherever the
+# `claude` CLI runs, without the SDK or any provider extra.
+janus-hook = "janus.cli.hook:main"
+
 [project.urls]
 Documentation = "https://agentic-ai-risk-mitigation.github.io/Janus/"
 Repository    = "https://github.com/Agentic-AI-Risk-Mitigation/Janus"

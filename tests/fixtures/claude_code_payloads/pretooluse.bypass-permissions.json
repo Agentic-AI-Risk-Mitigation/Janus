@@ -1,0 +1,17 @@
+{
+  "session_id": "ea745163-1550-49eb-850e-741888e66e56",
+  "transcript_path": "/home/evan/.claude/projects/-tmp-janus-esc-a7qXWw-ws/ea745163-1550-49eb-850e-741888e66e56.jsonl",
+  "cwd": "/tmp/janus-esc-a7qXWw/ws",
+  "prompt_id": "d46db320-7a74-4af6-b798-77ce3ea5bb21",
+  "permission_mode": "bypassPermissions",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "echo probe-done",
+    "description": "Echo probe-done"
+  },
+  "tool_use_id": "toolu_01MHWZwX19bs6HSTr9bd3Ab1"
+}

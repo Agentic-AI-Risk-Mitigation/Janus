@@ -194,6 +194,18 @@ class PolicyEnforcer:
         """Return True if a policy has been loaded."""
         return self._policy is not None
 
+    @property
+    def tool_names(self) -> frozenset[str]:
+        """Tool names the loaded policy has at least one rule for.
+
+        Cheap (no rule copying), unlike :attr:`policy`. Adapters use it to ask
+        "does the policy have an opinion about this tool?" — the Claude Code
+        adapter's gate mode abstains on tools absent from this set instead of
+        applying default-deny, because on that seam the CLI's own permission
+        flow is the downstream authority. Empty when no policy is loaded.
+        """
+        return frozenset(self._policy or ())
+
     # ------------------------------------------------------------------
     # Enforcement
     # ------------------------------------------------------------------
