@@ -129,9 +129,11 @@ The `janus-hook` shim enforces a Janus policy on the interactive `claude` CLI vi
    janus-hook doctor
    ```
 
-2. **Write a policy** (e.g. `~/.claude/janus/policy.json`). A gate-mode policy lists only
-   the tools Janus should have an opinion about — deny rules first, then an unconditional
-   allow so everything else on that tool falls through:
+2. **Write a policy** (e.g. `~/.claude/janus/policy.json`). Start from
+   `examples/claude_code/policy.starter.json` — secrets-read and pipe-to-shell denies plus
+   the built-in tool enumeration that `bypassPermissions` sessions require — or write your
+   own: list only the tools Janus should have an opinion about, deny rules first, then an
+   unconditional allow so everything else on that tool falls through:
 
    ```json
    {
@@ -171,4 +173,6 @@ Two behaviors to know before you deploy:
   hooks are re-read from disk, and `Bash` can rewrite any file a `Write`/`Edit` deny rule
   protects. Phase 1 is a policy monitor, not a reachability lockdown; see
   [Adapters → Claude Code CLI](adapters.md#claude-code-cli-interactive-claude) for the
-  full security model.
+  full security model, and
+  [Claude Code Deployment](claude-code-deployment.md) for the delivery-vehicle threat
+  model and troubleshooting.

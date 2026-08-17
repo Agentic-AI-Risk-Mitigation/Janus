@@ -73,3 +73,40 @@ shrunk and alarmed. Deployments that cannot accept that should use the
 [Claude Agent SDK path](adapters.md#claude-agent-sdk-claude-code): `janus_options()` remains
 the flagship precisely because it constructs the session, so tool *existence* is enforced
 by the CLI at session start rather than depending on a hook firing.
+
+## Troubleshooting
+
+**"Tool 'X' is not listed in the policy" — for a tool you never wrote a rule about.**
+You are in a `bypassPermissions` session (including `--dangerously-skip-permissions`),
+where gate mode promotes to strict default-deny: abstaining in a session that will never
+ask a human would be a silent allow, so unlisted tools are denied instead of deferred.
+Fix: add the tool to the policy with an unconditional allow rule (the starter policy in
+`examples/claude_code/` enumerates the common built-ins for exactly this reason), or run
+the session under a permission mode with a human in the loop. MCP tools are listed by
+their bare name — the `mcp__<server>__` prefix is stripped.
+
+**The hook never seems to fire.** The CLI's hook dispatch fails open — a hook that
+errors, times out, or is silently skipped by an upstream regression lets the tool proceed
+to the normal permission flow. Run `janus-hook doctor` (checks the interpreter, the Janus
+install, and a payload round-trip), confirm the settings file actually loaded the hook
+(`/hooks` in the CLI), and make sure the `permissions.deny` backstop is installed — it is
+the only layer that holds when no hooks run.
+
+**A deny didn't block.** Three known causes, all verified against CLI 2.1.233:
+
+1. *The hook overran the CLI-level `timeout`* — the CLI discards the late deny and the
+   tool runs. Keep the shim's `--deadline` (default 5 s) well under the hook entry's
+   `timeout`, so the shim denies while its output can still count.
+2. *Stray stdout corrupted the decision* — the CLI parses hook stdout as JSON; one stray
+   log line turns a deny into an unparseable non-blocking error. `janus-hook` isolates
+   stdout while Janus runs; if you build your own shim, redirect logging handlers, not
+   just `sys.stdout`.
+3. *An unrecognized `permissionDecision` value* — the CLI ignores it and the tool runs.
+   `escalate` behaves exactly like a misspelling; `ask` is the CLI's actual vocabulary
+   for "block and ask the human." If you extend the decision vocabulary, re-run the live
+   probe rather than trusting documentation.
+
+**Everything is suddenly denied.** The shim fails closed by design: an unreadable or
+missing policy file, a Janus internal error, or the `--deadline` expiring all produce a
+deny with a reason naming the cause. `janus-hook doctor` reproduces the failure outside
+the CLI.
