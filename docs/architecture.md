@@ -75,7 +75,7 @@ Janus sits between the LLM agent and its tools. Every tool call is intercepted, 
 - **Missing arguments** *(fixed in 0.0.6)*: The JSON enforcer now fails closed when a call omits an argument that a policy condition restricts — the allow rule does not match and the call falls through to default-deny (`strict_conditions=True`, the default; `False` restores the legacy skip). A per-tool `required_args` option additionally rejects absent/blank arguments that no condition covers.
 - **PDE taint session reset**: PDE taint only increases during a session, and the PDE engine has no `reset_session()` — long-running services need per-request sessions. (`TaintTracker` does provide `reset()`.)
 - **Two unreconciled taint mechanisms**: PDE's manual session scalar and `TaintTracker`'s automatic per-source labels are independent. `TaintTracker` is the path forward, but the PDE engine does not consume it.
-- **`TaintTracker` seam coverage**: automatic derivation is wired only into the Claude Agent SDK adapter (`PostToolUse`). LangChain/ADK integrations must call `record_output()` themselves.
+- **`TaintTracker` seam coverage**: automatic derivation is wired only into the Claude Agent SDK adapter (`PostToolUse`). LangChain/ADK integrations must call `record_output()` themselves. The Claude Code CLI adapter is phase-1 **stateless** — the `janus-hook` shim evaluates static policy per call with no taint or cross-call state at all; the phase-2 daemon restores those (see `plans/claude-code-plugin-design.md`).
 - **SpiceDB unreachable**: If SpiceDB is down, the engine raises a gRPC exception. No timeout, retry, or fail-closed toggle.
 - **Schema divergence**: The SpiceDB schema lives in `janus/policy/pde/config.py`; bootstrap and relationships are in `pde/bootstrap.py`.
 - **LLM-generated policies**: Effective but not provably complete. Manual policies can be crafted for provable coverage; LLM-generated ones reduce attack surface but may miss edge cases.
@@ -109,7 +109,10 @@ janus/
 ├── adapters/
 │   ├── langchain.py
 │   ├── adk.py
-│   └── claude_agent_sdk.py
+│   ├── claude_agent_sdk.py
+│   └── claude_code.py    # Claude Code CLI hook adapter (interactive `claude`)
+├── cli/
+│   └── hook.py           # `janus-hook` — CLI hook shim (fails closed)
 
 examples/                  # Demo scenario framework + web app
 ├── shared/                # Events, mock tools, scripted LLM, scenario runner

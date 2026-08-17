@@ -35,6 +35,25 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Claude Code CLI adapter** (`janus.adapters.claude_code` + the `janus-hook` console script,
+  core install — no extra): enforce a Janus policy on the *interactive* `claude` CLI via its
+  `PreToolUse`/`PostToolUse` hooks. Unlike the SDK path, Janus does not construct the session
+  here, so this is a policy monitor backstopped by `permissions.deny` (`janus-hook backstop`
+  prints the block), not a reachability lockdown — `docs/adapters.md` spells out the weaker
+  security model. `mode="gate"` (default) enforces only the tools the policy has an opinion
+  about and abstains to the CLI permission flow elsewhere; `mode="policy"` is strict
+  default-deny; gate mode auto-promotes to policy mode under `bypassPermissions`, where
+  abstention would degrade to a silent allow. The shim owns its exit path so enforcement fails
+  *closed* (unreadable policy, internal error, or its own `--deadline` all deny) even though
+  the CLI's hook dispatch fails *open* — a hook that overran the CLI's `timeout` had its deny
+  discarded on 2.1.233. Taint-gate escalation emits the CLI's `ask` decision (verified to
+  block and surface the reason; `escalate` is unrecognized and would silently allow).
+  Phase 1 is deliberately stateless — static policy evaluation per call, no taint, no
+  provenance, no cross-call state; the daemon that restores those is phase 2
+  (`plans/claude-code-plugin-design.md`).
+- `tests/test_claude_code_adapter.py` + `tests/test_claude_code_shim.py` (81 offline tests)
+  covering payload normalization, gate/policy semantics, unsupervised promotion, escalation
+  downgrade, and the shim's fail-closed paths.
 - **`on_decision` audit callback in the Claude Agent SDK adapter** — `janus_options()`,
   `janus_hooks()`, and `janus_pretooluse_hook()` accept an optional
   `on_decision(runtime_tool_name, arguments, allowed, reason)` callable, invoked once per
