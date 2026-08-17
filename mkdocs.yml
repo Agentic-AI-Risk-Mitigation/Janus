@@ -26,5 +26,6 @@ nav:
   - Policy Reference: policy-reference.md
   - Architecture: architecture.md
   - Adapters: adapters.md
+  - Claude Code Deployment: claude-code-deployment.md
   - Taint Tracking: taint.md
   - SpiceDB Enforcement: spicedb-enforcement.md

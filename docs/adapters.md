@@ -331,3 +331,42 @@ plugin form `mcp__plugin_<plugin>_<server>__<tool>`) to the bare policy key. Sup
 `known_servers`: the CLI has no `strict_mcp_config`, so an unsanctioned server would otherwise
 inherit an allow rule written for a same-named tool elsewhere. Unknown servers resolve to a
 reserved sentinel that no policy key can match.
+
+### Reference: `janus-hook`
+
+```
+janus-hook <pre|post|session-start|session-end> --policy <path> [flags]
+janus-hook doctor
+janus-hook backstop [--indent N]
+```
+
+Each hook subcommand reads one hook payload as JSON on stdin and writes the CLI's hook JSON
+(or nothing, meaning "no opinion") to stdout. Only `pre` ever blocks anything; `post`,
+`session-start`, and `session-end` exist so the wiring is stable for phase 2 — without a
+daemon they have no session to record into and stay quiet. Failures follow the seam:
+anything unreadable or broken on `pre` emits a deny, on every other seam there is nothing
+to deny and the shim stays silent. Stdout is isolated while Janus runs — a logging handler
+writing to stdout would otherwise corrupt the decision JSON, which the CLI treats as a
+non-blocking hook error, turning a deny into an allow.
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--policy <path>` | *required* | Janus JSON policy file, re-read per call. Required deliberately: an enforcer with no policy allows everything, and argparse's exit 2 on the missing flag is itself a blocking hook error — even the misconfiguration fails closed. |
+| `--config <path>` | — | JSON sidecar for knobs that are not policy rules. Keys: `required_args` (`{"tool": ["arg", ...]}` — reject calls where these are absent or blank) and `known_servers` (`["server", ...]` — MCP allowlist for name resolution; see below). |
+| `--mode gate\|policy` | `gate` | `gate`: enforce the tools the policy has an opinion about, abstain elsewhere to the CLI permission flow. `policy`: strict default-deny. Gate auto-promotes to policy under `bypassPermissions`. |
+| `--on-gate ask\|deny` | `ask` | What a taint-gate hit emits. `ask` blocks and surfaces the reason for human approval (the CLI's verified vocabulary — `escalate` is unrecognized and would silently allow). Ignored in phase 1, which has no cross-call taint. |
+| `--headless` | off | Declare that no human can answer a permission prompt; escalations downgrade to plain denies. Must be declared: a `claude -p` run reports `permission_mode: "default"` exactly like an interactive one, so the payload cannot tell you. |
+| `--deadline <seconds>` | `5.0` | The shim's own time budget (0 disables). On expiry it denies while it still can — necessary because the CLI's hook-level `timeout` fails *open*. Keep this well under the hook entry's `timeout`. |
+
+**`known_servers` is security-relevant.** The CLI has no `strict_mcp_config`, so any MCP
+server the user has configured can mount tools. Name resolution strips `mcp__<server>__`
+(and the plugin form `mcp__plugin_<plugin>_<server>__`) down to the bare policy key — which
+means a tool from an *unsanctioned* server would inherit an allow rule written for a
+same-named tool elsewhere. With `known_servers` set, tools from unknown servers resolve to
+a reserved sentinel no policy key can match: denied in policy mode, abstained (deferred to
+the human) in gate mode.
+
+`doctor` self-tests the install — interpreter, Janus version, a payload round-trip
+asserting gate-mode abstention and policy-mode default-deny — and exits non-zero on
+failure. `backstop` prints the `permissions.deny` block to merge into settings; it is the
+layer that still holds when no hooks run at all.
