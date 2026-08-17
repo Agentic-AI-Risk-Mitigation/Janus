@@ -1,0 +1,20 @@
+{
+  "session_id": "08cbd349-6880-4aef-82dc-24b65a1512dd",
+  "transcript_path": "/home/evan/.claude/projects/-tmp-janus-to-m8XnPz-ws/08cbd349-6880-4aef-82dc-24b65a1512dd.jsonl",
+  "cwd": "/tmp/janus-to-m8XnPz/ws",
+  "prompt_id": "52f2d40a-46e6-4ca5-9390-1bd266087447",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUseFailure",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cat ./janus-probe-missing.txt",
+    "description": "Cat the probe file"
+  },
+  "tool_use_id": "toolu_01QoyKN1N7NNniXupRKq4SAX",
+  "error": "Exit code 1\ncat: ./janus-probe-missing.txt: No such file or directory",
+  "is_interrupt": false,
+  "duration_ms": 4915
+}

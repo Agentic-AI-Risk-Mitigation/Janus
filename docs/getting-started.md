@@ -25,6 +25,9 @@ uv add "janus-guard[claude]"      # Claude Agent SDK (Claude Code) adapter
 uv add "janus-guard[all]"         # Everything
 ```
 
+The Claude Code **CLI** adapter (`janus-hook`) needs no extra — it ships with the core
+install, because a hook has to run wherever `claude` runs.
+
 Install from source:
 
 ```bash
@@ -114,3 +117,62 @@ Scenarios and the demo framework live under `examples/`. The current catalog inc
 5. **Tests**: Run the regression suite with `uv run pytest`. It is fully offline — no LLM, no
    SpiceDB. The live SDK smoke suite is opt-in: `JANUS_LIVE_SMOKE=1 uv run pytest tests/smoke/ -v`
    (needs the `claude` CLI and API credentials).
+
+## Guard Your Interactive Claude Code (Under 5 Minutes)
+
+The `janus-hook` shim enforces a Janus policy on the interactive `claude` CLI via its
+`PreToolUse` hook. It ships with the core install — no extra needed.
+
+1. **Self-test the install**:
+
+   ```bash
+   janus-hook doctor
+   ```
+
+2. **Write a policy** (e.g. `~/.claude/janus/policy.json`). Start from
+   `examples/claude_code/policy.starter.json` — secrets-read and pipe-to-shell denies plus
+   the built-in tool enumeration that `bypassPermissions` sessions require — or write your
+   own: list only the tools Janus should have an opinion about, deny rules first, then an
+   unconditional allow so everything else on that tool falls through:
+
+   ```json
+   {
+     "Read": [
+       {"priority": 1, "effect": 1, "fallback": 0,
+        "conditions": {"file_path": {"type": "string",
+                       "pattern": "(^|/)\\.env(?!\\.example)[^/]*$|/\\.ssh/"}}},
+       {"priority": 10, "effect": 0, "conditions": {}, "fallback": 0}
+     ]
+   }
+   ```
+
+3. **Wire the hook** into `~/.claude/settings.json` (or a project's `.claude/settings.json`):
+
+   ```json
+   {
+     "hooks": {
+       "PreToolUse": [
+         {"hooks": [{"type": "command",
+                     "command": "janus-hook pre --policy ~/.claude/janus/policy.json --mode gate"}]}
+       ]
+     }
+   }
+   ```
+
+4. **Add the backstop** — `janus-hook backstop` prints a `permissions.deny` block to merge
+   into the same settings file. It is the only layer that holds if hooks silently stop
+   running.
+
+Two behaviors to know before you deploy:
+
+- **Gate mode promotes to strict default-deny under `bypassPermissions`** (including
+  `--dangerously-skip-permissions`): abstaining in a session where no human will ever be
+  asked would be a silent allow. If you run bypass sessions, the policy must enumerate
+  every tool they use — an unlisted tool (built-in or MCP) is denied there, not deferred.
+- **Settings-file delivery is not tamper-proof against the agent it guards** — settings
+  hooks are re-read from disk, and `Bash` can rewrite any file a `Write`/`Edit` deny rule
+  protects. Phase 1 is a policy monitor, not a reachability lockdown; see
+  [Adapters → Claude Code CLI](adapters.md#claude-code-cli-interactive-claude) for the
+  full security model, and
+  [Claude Code Deployment](claude-code-deployment.md) for the delivery-vehicle threat
+  model and troubleshooting.

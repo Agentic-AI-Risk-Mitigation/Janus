@@ -67,3 +67,19 @@ def test_unknown_attribute_still_raises():
 
     with pytest.raises(AttributeError):
         janus.no_such_symbol
+
+
+def test_claude_code_adapter_imports_on_a_core_install():
+    """The CLI hook shim must run wherever `claude` runs — no `claude` extra,
+    no SDK, no server deps. A missing import here means a deployed hook fails
+    closed on every call."""
+    out = _run(
+        "import janus.adapters.claude_code, sys; "
+        "print(sorted(m for m in ('claude_agent_sdk', 'fastapi', 'openai') if m in sys.modules))"
+    )
+    assert out == "[]"
+
+
+def test_janus_hook_shim_imports_on_a_core_install():
+    out = _run("from janus.cli.hook import main; print(callable(main))")
+    assert out == "True"

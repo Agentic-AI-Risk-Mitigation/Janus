@@ -30,7 +30,7 @@ Janus supports two engines:
 - LLM-generated policies from user query
 - Policy refinement as the agent gathers information
 - Three fallback actions: raise exception, exit, or prompt user
-- Framework adapters for LangChain, Google ADK, and the Claude Agent SDK (Claude Code)
+- Framework adapters for LangChain, Google ADK, and the Claude Agent SDK (Claude Code), plus a `PreToolUse` hook shim (`janus-hook`) for the interactive Claude Code CLI
 - Standalone `PolicyEnforcer` for custom integrations
 - Built-in file and command tools with workspace sandboxing
 

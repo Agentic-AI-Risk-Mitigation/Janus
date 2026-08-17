@@ -98,7 +98,7 @@ from janus.tools.base import ToolDef, ToolParam
 from janus.tools.builtin import BUILTIN_TOOLS
 from janus.tools.registry import ToolRegistry
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 # The policy generator is loaded lazily: it needs the optional 'generate' extra
 # (openai, jinja2), and eagerly importing it here forced those dependencies —

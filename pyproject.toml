@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "janus-guard"
-version = "0.1.0"
+version = "0.1.1"
 description = "System-level security for LLM agents via fine-grained policy enforcement on tool calls."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -82,6 +82,11 @@ docs = [
     "pymdown-extensions>=10.0",
     "mkdocs-mermaid2-plugin>=0.7.0",
 ]
+
+[project.scripts]
+# The Claude Code CLI hook shim. Core-install only: it must run wherever the
+# `claude` CLI runs, without the SDK or any provider extra.
+janus-hook = "janus.cli.hook:main"
 
 [project.urls]
 Documentation = "https://agentic-ai-risk-mitigation.github.io/Janus/"

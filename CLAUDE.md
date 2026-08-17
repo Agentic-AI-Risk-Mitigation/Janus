@@ -70,6 +70,8 @@ Don't conflate them — they are independent:
 
 `janus/adapters/claude_agent_sdk.py` is different in kind: the Claude Agent SDK's tool loop runs inside the `claude` CLI subprocess, so Janus never sees the call in-process and must enforce at the SDK's pre-execution seams. Use `janus_options()` — it builds a locked-down `ClaudeAgentOptions` so that a silently skipped `PreToolUse` hook (which has regressed upstream before) can't escalate to arbitrary `Bash`. Full seam-by-seam reference, including the layering rationale and every knob, is in **`docs/adapters.md`**; verified SDK behaviour is in `plans/claude-agent-sdk-hardening.md`. Behind the `claude` extra.
 
+`janus/adapters/claude_code.py` + `janus/cli/hook.py` (the `janus-hook` console script, core install) target the *interactive* CLI via its `PreToolUse`/`PostToolUse` hooks. Weaker model than the SDK path — a policy monitor backstopped by `permissions.deny`, not a reachability lockdown — and phase 1 is deliberately stateless (static policy per call; no taint or cross-call state until the phase-2 daemon). Gate mode abstains on unlisted tools but auto-promotes to strict default-deny under `bypassPermissions`. The shim fails closed even though CLI hook dispatch fails open on timeout. Reference: the CLI section of `docs/adapters.md`; design and verified CLI probe results: `plans/claude-code-plugin-design.md`.
+
 ## Conventions
 
 - **Style**: 4-space indent, type hints on public interfaces, concise docstrings where behavior is non-obvious. `snake_case` modules/functions, `PascalCase` classes, `UPPER_CASE` constants. Ruff config (line length, target version, rule set) lives in `pyproject.toml` — read it there rather than assuming.
@@ -95,3 +97,4 @@ Always question and analyze the intent and purpose of the code against its funct
 - Hardcoded SpiceDB token defaults in `pde_enforcer.py` and `janus/policy/pde/`
 - PDE taint remains manual and session-scalar; `TaintTracker` supersedes it for new work but the two are not yet unified
 - `TaintTracker` is only wired into the Claude Agent SDK adapter — LangChain/ADK adapters have no post-execution seam yet
+- The Claude Code CLI adapter is phase-1 stateless: `janus-hook` imports Janus per call and holds no cross-call state, so no taint/provenance on that path until the phase-2 daemon

@@ -11,6 +11,7 @@ a dict, a `PolicyEnforcer` instance, or `None`.
 | LangChain | `janus.adapters.langchain` | `langchain` | Guarded `StructuredTool` handlers |
 | Google ADK (Gemini) | `janus.adapters.adk` | `adk` | Guarded function-call handlers |
 | Claude Agent SDK (Claude Code) | `janus.adapters.claude_agent_sdk` | `claude` | SDK `PreToolUse` hook / `can_use_tool` |
+| Claude Code CLI (interactive) | `janus.adapters.claude_code` | — (core) | CLI `PreToolUse` / `PostToolUse` hooks |
 
 Full, copy-pasteable usage for LangChain and ADK is in the
 [README](https://github.com/Agentic-AI-Risk-Mitigation/Janus#framework-adapters). This page
@@ -71,13 +72,15 @@ What it generates:
   enumerated and require an explicit `allowed_tools=` merge (still policy-filtered).
 - **`permission_mode="dontAsk"`** — anything not allow-listed is denied, not prompted.
 - **`hooks=janus_hooks(...)`** — the argument-level seam, wired with the same knobs
-  (`required_args`, `taint`, `resolve_name`, `passthrough_tools`).
+  (`required_args`, `session`, `resolve_name`, `passthrough_tools`).
 
 Three extra knobs:
 
-- **`taint=TaintTracker(...)`** — wires *both* hook seams so session taint is derived
-  automatically: a `PostToolUse` hook records untrusted reads, and the `PreToolUse` hook gates
-  sinks on them before the static policy runs. See [Taint Tracking](taint.md).
+- **`session=Session(taint=TaintTracker(...))`** — wires *both* hook seams so session taint is
+  derived automatically: a `PostToolUse` hook records untrusted reads, and the `PreToolUse` hook
+  gates sinks on them before the static policy runs. `Session` also carries provenance and the
+  audit trail; passing a bare `taint=` tracker still works but is deprecated. See
+  [Taint Tracking](taint.md).
 
 - **`hook_approved_tools={"send_email"}`** — high-risk sinks kept *off* `allowed_tools` even
   though mounted and policy-listed. The Janus hook approves them explicitly on allow, so under
@@ -131,22 +134,24 @@ ready `hooks=` dict.
 ### Automatic taint — the `PostToolUse` seam
 
 A static policy judges one call at a time, so it cannot express "don't send email *after* reading
-an untrusted web page." Pass a `TaintTracker` and both seams get wired: `PostToolUse` derives
-taint from tool outputs, `PreToolUse` gates sinks on it *before* the policy runs.
+an untrusted web page." Pass a `Session` wrapping a `TaintTracker` and both seams get wired:
+`PostToolUse` derives taint from tool outputs, `PreToolUse` gates sinks on it *before* the
+policy runs.
 
 ```python
-from janus.policy import TaintTracker
+from janus.policy import Session, TaintTracker
 from janus.adapters.claude_agent_sdk import janus_hooks
 
 tracker = TaintTracker(
     sources={"fetch_page": "web", "read_email": "email"},
     gates={"send_email": "*"},      # Rule of Two: no outbound send after any untrusted read
 )
-options = ClaudeAgentOptions(..., hooks=janus_hooks(TOOL_POLICY, taint=tracker))
+options = ClaudeAgentOptions(..., hooks=janus_hooks(TOOL_POLICY, session=Session(taint=tracker)))
 ```
 
-Use one tracker per session and call `tracker.reset()` only at session boundaries. Blocked calls
-don't taint the session — only calls that actually returned a response are recorded.
+Use one session per agent conversation and call `tracker.reset()` only at session boundaries.
+Blocked calls don't taint the session — only calls that actually returned a response are
+recorded. (A bare `taint=tracker` still works but is deprecated.)
 `janus_posttooluse_hook()` returns the raw callback if you are assembling matchers by hand.
 Full reference: [Taint Tracking](taint.md).
 
@@ -189,3 +194,179 @@ guarded = guard_tool_body("fetch_page", my_async_body, TOOL_POLICY,
 ```
 
 A runnable end-to-end example is in `examples/claude_agent_sdk_demo.py`.
+
+## Claude Code CLI (interactive `claude`)
+
+`janus.adapters.claude_code` targets the **interactive CLI**, not the SDK. It needs no extra —
+it is core-install only, because a hook has to run wherever `claude` runs.
+
+### What you get, and what you don't
+
+Read this before deploying it, because the security model is genuinely weaker than the SDK
+path's and pretending otherwise is worse than not shipping it:
+
+> **On the CLI, Janus is a policy monitor over a session it does not own, backstopped by
+> `permissions.deny`. It is not a reachability lockdown.**
+
+`janus_options()` works because Janus *constructs* the SDK session — no built-in tools, no MCP
+leakage, `allowed_tools` = policy ∩ mounted. On the interactive CLI the human constructs the
+session, so that layer is simply gone:
+
+| Layer | SDK path | CLI path |
+|---|---|---|
+| does the tool exist? | `tools=[]` + `strict_mcp_config` | **gone** — the session is the user's |
+| may it run unprompted? | `allowed_tools` ∩ policy + `dontAsk` | `permissions.deny` (+ managed settings) |
+| may it run with these args? | Janus `PreToolUse` hook (fails closed on timeout) | Janus `PreToolUse` hook (CLI dispatch fails **open** on timeout) |
+| runs even if all above lied | `guard_tool_body()` | **gone** — tool bodies are the CLI's |
+
+Two consequences worth internalizing. First, the `permissions.deny` backstop is not optional
+decoration: it is the only layer that holds with zero hooks running, which is exactly the
+failure mode upstream hook-dispatch regressions produce. Print it with `janus-hook backstop`
+and paste it into your settings. Second, settings-file hook delivery is **not a security
+boundary against the agent it guards** — settings are re-read from disk, so one `Edit` of
+`~/.claude/settings.json` disarms the guard mid-session. That is fine for evaluation and for
+catching accidents; a plugin (hooks are snapshotted per session) is the minimum for "the
+session I started stays guarded", and managed settings are the minimum for "the machine stays
+guarded". Those ship in later phases.
+
+### Gate mode vs. policy mode
+
+`mode="gate"` (default) has Janus enforce the tools it has an opinion about — policy rules,
+taint gates, required-args entries — and return `{}` for everything else. `{}` is *not* a
+silent allow: it means "no opinion, fall through to the CLI permission flow and the human".
+That downstream authority is what makes abstention defensible here and not on the SDK seam,
+where default-deny remains correct.
+
+`mode="policy"` is strict default-deny, identical to the library and SDK paths. Use it for
+headless and managed deployments, where the tool surface is known and no human is watching.
+
+**Abstention is only as good as the authority it defers to.** Under
+`permission_mode="bypassPermissions"` nothing will ever ask a human, so abstention degrades
+to a real silent allow. Gate mode therefore auto-promotes to policy mode under those modes.
+Note this is specifically about *abstention*, not about hooks losing: a hook `deny` and a
+hook `ask` were both verified to still block under `--dangerously-skip-permissions`. An
+abstention just isn't a decision, so there is nothing for the CLI to honor.
+
+Note also that the payload cannot tell you a session is headless — a `claude -p` run reports
+`permission_mode: "default"` exactly like an interactive one — so pass `--headless` when wiring
+hooks into a non-interactive deployment.
+
+### Escalation uses `ask`, and the spelling matters
+
+A taint-gate hit resolves to the CLI's `ask` decision: the call is blocked and the Janus
+reason (including its `(audit id …)` suffix) is surfaced, so a human's approval is informed.
+Static policy denies stay `deny` — the operator already decided those calls are wrong, and
+prompting would only train click-through.
+
+`ask` is not an arbitrary choice of word. Probed against CLI 2.1.233, an **unrecognized**
+`permissionDecision` does not raise an error — the hook output is ignored and the tool
+runs. `escalate`, which reads like the natural name, behaves exactly like a misspelling:
+
+| emitted decision | `claude -p` | `--dangerously-skip-permissions` |
+|---|---|---|
+| `deny` | blocked | blocked |
+| `ask` | blocked, reason reached the model | blocked |
+| `escalate` | **ran** | — |
+| `totally-bogus-value` | **ran** | — |
+
+A gate emitting `escalate` would have silently allowed every hit — the worst available
+failure for the mechanism whose whole job is stopping consequential actions after untrusted
+input. If you extend the decision vocabulary, re-run that experiment rather than trusting a
+doc.
+
+### Wiring it (phase 1: settings file, stateless)
+
+```bash
+janus-hook backstop > /tmp/backstop.json   # the permissions.deny block; merge into settings
+```
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      { "hooks": [{ "type": "command",
+                    "command": "janus-hook pre --policy /etc/janus/policy.json --mode gate" }] }
+    ]
+  }
+}
+```
+
+The shim reads the payload on stdin and prints the CLI's hook JSON. It fails **closed**: an
+unreachable policy file, an unparseable payload, or a bug inside Janus all produce a deny,
+because the CLI's own dispatch failure mode is to proceed. `janus-hook doctor` self-tests the
+install.
+
+It also owns a `--deadline` (default 5s), and that is not belt-and-braces. The CLI's hook
+timeout was verified to fail open on 2.1.233 — a hook configured with `"timeout": 3` that
+slept 10s before denying had its deny **discarded and the tool ran**. Whatever stalls (a
+policy file on a hung mount, a pathological condition regex, the janus import itself), the
+shim has to hit its own limit first and deny while it still can. Keep `--deadline` well
+under whatever `timeout` you set on the hook entry.
+
+Phase 1 is deliberately the **degraded mode**: there is no daemon, so the shim holds no
+cross-call state — static policy evaluation only, with no taint, no provenance, and no
+`PreToolUse`/`PostToolUse` cross-check. It is genuinely useful (argument-level enforcement of a
+static policy, today) and it is not the recommended deployment. Configuration arrives as
+explicit argv flags rather than env vars so that a plugin's `userConfig` can slot into
+exec-form `args` unchanged later.
+
+### Using the adapter directly
+
+```python
+from janus.adapters.claude_code import handle_cli_payload, normalize_cli_event, decide_cli_event
+
+output = handle_cli_payload(payload, "policy.json", mode="gate", session=session)
+```
+
+`normalize_cli_event` is the load-bearing piece: it reads `tool_response` **or** `tool_output`
+(CLI 2.1.233 sends the former, the docs say the latter), never raises on shape drift, and keeps
+the untouched payload in `.raw` for audit. `normalize_cli_events` additionally fans out a
+`PostToolBatch` envelope, which carries a `tool_calls` array and no `tool_name` at all. Every
+one of these behaviours is pinned by verbatim payload captures in
+`tests/fixtures/claude_code_payloads/` — where the fixtures and the docs disagree, the fixtures
+win.
+
+`claude_code_resolve_name(name, known_servers=...)` maps `mcp__<server>__<tool>` (and the
+plugin form `mcp__plugin_<plugin>_<server>__<tool>`) to the bare policy key. Supply
+`known_servers`: the CLI has no `strict_mcp_config`, so an unsanctioned server would otherwise
+inherit an allow rule written for a same-named tool elsewhere. Unknown servers resolve to a
+reserved sentinel that no policy key can match.
+
+### Reference: `janus-hook`
+
+```
+janus-hook <pre|post|session-start|session-end> --policy <path> [flags]
+janus-hook doctor
+janus-hook backstop [--indent N]
+```
+
+Each hook subcommand reads one hook payload as JSON on stdin and writes the CLI's hook JSON
+(or nothing, meaning "no opinion") to stdout. Only `pre` ever blocks anything; `post`,
+`session-start`, and `session-end` exist so the wiring is stable for phase 2 — without a
+daemon they have no session to record into and stay quiet. Failures follow the seam:
+anything unreadable or broken on `pre` emits a deny, on every other seam there is nothing
+to deny and the shim stays silent. Stdout is isolated while Janus runs — a logging handler
+writing to stdout would otherwise corrupt the decision JSON, which the CLI treats as a
+non-blocking hook error, turning a deny into an allow.
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--policy <path>` | *required* | Janus JSON policy file, re-read per call. Required deliberately: an enforcer with no policy allows everything, and argparse's exit 2 on the missing flag is itself a blocking hook error — even the misconfiguration fails closed. |
+| `--config <path>` | — | JSON sidecar for knobs that are not policy rules. Keys: `required_args` (`{"tool": ["arg", ...]}` — reject calls where these are absent or blank) and `known_servers` (`["server", ...]` — MCP allowlist for name resolution; see below). |
+| `--mode gate\|policy` | `gate` | `gate`: enforce the tools the policy has an opinion about, abstain elsewhere to the CLI permission flow. `policy`: strict default-deny. Gate auto-promotes to policy under `bypassPermissions`. |
+| `--on-gate ask\|deny` | `ask` | What a taint-gate hit emits. `ask` blocks and surfaces the reason for human approval (the CLI's verified vocabulary — `escalate` is unrecognized and would silently allow). Ignored in phase 1, which has no cross-call taint. |
+| `--headless` | off | Declare that no human can answer a permission prompt; escalations downgrade to plain denies. Must be declared: a `claude -p` run reports `permission_mode: "default"` exactly like an interactive one, so the payload cannot tell you. |
+| `--deadline <seconds>` | `5.0` | The shim's own time budget (0 disables). On expiry it denies while it still can — necessary because the CLI's hook-level `timeout` fails *open*. Keep this well under the hook entry's `timeout`. |
+
+**`known_servers` is security-relevant.** The CLI has no `strict_mcp_config`, so any MCP
+server the user has configured can mount tools. Name resolution strips `mcp__<server>__`
+(and the plugin form `mcp__plugin_<plugin>_<server>__`) down to the bare policy key — which
+means a tool from an *unsanctioned* server would inherit an allow rule written for a
+same-named tool elsewhere. With `known_servers` set, tools from unknown servers resolve to
+a reserved sentinel no policy key can match: denied in policy mode, abstained (deferred to
+the human) in gate mode.
+
+`doctor` self-tests the install — interpreter, Janus version, a payload round-trip
+asserting gate-mode abstention and policy-mode default-deny — and exits non-zero on
+failure. `backstop` prints the `permissions.deny` block to merge into settings; it is the
+layer that still holds when no hooks run at all.

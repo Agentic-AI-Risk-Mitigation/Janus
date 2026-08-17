@@ -51,6 +51,7 @@ Janus intercepts every tool call an LLM agent makes and validates it against a s
       - [Automatic taint — the `PostToolUse` seam](#automatic-taint--the-posttooluse-seam)
       - [Alternative seam — `can_use_tool` callback](#alternative-seam--can_use_tool-callback)
       - [Belt-and-braces — `guard_tool_body()`](#belt-and-braces--guard_tool_body)
+    - [Claude Code CLI (interactive `claude`)](#claude-code-cli-interactive-claude)
   - [Standalone Policy Enforcement](#standalone-policy-enforcement)
   - [Runtime Policy Management](#runtime-policy-management)
   - [Error Handling](#error-handling)
@@ -72,7 +73,7 @@ Janus intercepts every tool call an LLM agent makes and validates it against a s
 - **Built-in tools** — ready-to-use file system and command execution tools with workspace sandboxing
 - **Custom tools** — define your own tools with `ToolDef` / `ToolParam`; Janus guards them automatically
 - **10+ LLM providers** — OpenAI, Anthropic, Google Gemini, Azure OpenAI, AWS Bedrock, Ollama, vLLM, Together AI, OpenRouter
-- **Framework adapters** — plug Janus enforcement into LangChain, Google ADK, and Claude Agent SDK (Claude Code) agents
+- **Framework adapters** — plug Janus enforcement into LangChain, Google ADK, and Claude Agent SDK (Claude Code) agents, plus a `PreToolUse` hook shim (`janus-hook`) for the interactive Claude Code CLI
 - **Standalone enforcer** — use `PolicyEnforcer` independently in any agentic framework
 - **Three fallback actions** — raise `PolicyViolation`, call `sys.exit`, or prompt the user interactively
 - **Workspace isolation** — file tools are scoped to a directory; path-traversal attempts are rejected
@@ -106,6 +107,8 @@ uv add "janus-guard[adk]"         # Google ADK adapter
 uv add "janus-guard[claude]"      # Claude Agent SDK (Claude Code) adapter
 uv add "janus-guard[all]"         # Everything
 ```
+
+The Claude Code **CLI** adapter (`janus.adapters.claude_code` + the `janus-hook` shim) needs no extra — it ships with the core install.
 
 **For development:**
 
@@ -303,9 +306,10 @@ if reason:
 - Gating is whole-tool and argument-independent by design — the arguments are exactly what an
   injected instruction controls.
 - `classify=` adds content-aware labels on top of the static source map.
-- With the Claude Agent SDK adapter, derivation is **automatic**: pass `taint=tracker` to
-  `janus_hooks()` / `janus_options()` and the `PostToolUse` seam records reads while `PreToolUse`
-  gates sinks.
+- With the Claude Agent SDK adapter, derivation is **automatic**: pass
+  `session=Session(taint=tracker)` to `janus_hooks()` / `janus_options()` and the `PostToolUse`
+  seam records reads while `PreToolUse` gates sinks. (`taint=tracker` still works but is
+  deprecated; `Session` adds provenance and the audit trail.)
 
 Full reference: [Taint Tracking](https://agentic-ai-risk-mitigation.github.io/Janus/taint/). This
 is distinct from the PDE engine's manual session-scalar taint, which needs SpiceDB.
@@ -642,12 +646,13 @@ The hook seam alone leaves tool-level reachability hostage to the hook firing, a
 ```python
 from claude_agent_sdk import create_sdk_mcp_server
 from janus.adapters.claude_agent_sdk import janus_options
+from janus.policy import Session
 
 options = janus_options(
     TOOL_POLICY,
     mcp_servers={"research": create_sdk_mcp_server(name="research", tools=[...])},
     required_args={"fetch_page": ["url"]},
-    taint=tracker,                       # optional: automatic per-source taint gating
+    session=Session(taint=tracker),      # optional: automatic taint gating + provenance
     hook_approved_tools={"send_email"},  # optional: sinks must clear hook *and* permission layer
     output_format={"type": "json_schema", "schema": SCHEMA},   # extra kwargs forwarded
 )
@@ -693,17 +698,18 @@ Unexpected exceptions inside the hook (enforcer bug, malformed input) return a *
 
 #### Automatic taint — the `PostToolUse` seam
 
-Pass `taint=` a [`TaintTracker`](#taint-tracking-ipi-defence) and both seams are wired: `PostToolUse` derives session taint from tool outputs, and `PreToolUse` gates sinks on it before the static policy runs. No manual `update_taint()` calls:
+Pass `session=` a `Session` wrapping a [`TaintTracker`](#taint-tracking-ipi-defence) and both seams are wired: `PostToolUse` derives session taint from tool outputs, and `PreToolUse` gates sinks on it before the static policy runs. No manual `update_taint()` calls:
 
 ```python
-from janus.policy import TaintTracker
+from janus.policy import Session, TaintTracker
 from janus.adapters.claude_agent_sdk import janus_hooks
 
 tracker = TaintTracker(sources={"fetch_page": "web"}, gates={"send_email": "*"})
-options = ClaudeAgentOptions(..., hooks=janus_hooks(TOOL_POLICY, taint=tracker))
+options = ClaudeAgentOptions(..., hooks=janus_hooks(TOOL_POLICY, session=Session(taint=tracker)))
 ```
 
-Use one tracker per session; blocked calls never taint it.
+Use one session per agent conversation; blocked calls never taint it. (Passing a bare
+`taint=tracker` still works but is deprecated — `Session` adds provenance and the audit trail.)
 
 #### Alternative seam — `can_use_tool` callback
 
@@ -719,6 +725,29 @@ from janus.adapters.claude_agent_sdk import guard_tool_body
 guarded = guard_tool_body("fetch_page", my_async_body, TOOL_POLICY,
                           required_args={"fetch_page": ["url"]})
 ```
+
+### Claude Code CLI (interactive `claude`)
+
+`janus.adapters.claude_code` targets the **interactive CLI** — the `claude` you type into — via its `PreToolUse`/`PostToolUse` hooks. It is a core install (no extra): a hook has to run wherever `claude` runs.
+
+The security model is genuinely weaker than the SDK path's, and the docs say so up front: on the CLI, **Janus is a policy monitor over a session it does not own, backstopped by `permissions.deny` — not a reachability lockdown.** The human constructs the session, so the SDK path's `tools=[]`/`strict_mcp_config`/`allowed_tools` layers are simply gone.
+
+Wire the `janus-hook` shim into a settings file:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      { "hooks": [{ "type": "command",
+                    "command": "janus-hook pre --policy /etc/janus/policy.json --mode gate" }] }
+    ]
+  }
+}
+```
+
+`--mode gate` (default) enforces the tools the policy has an opinion about and abstains to the CLI's own permission flow elsewhere; `--mode policy` is strict default-deny. Gate mode auto-promotes to policy mode under `bypassPermissions`, where abstention would be a silent allow — so bypass sessions need the policy to enumerate their tool surface. The shim fails **closed** (unreadable policy, internal error, or its own `--deadline` all deny), which matters because the CLI's hook dispatch fails **open** on timeout. `janus-hook doctor` self-tests the install; `janus-hook backstop` prints the `permissions.deny` block that holds even if hooks stop running.
+
+Phase 1 is deliberately stateless — static policy per call, no taint or cross-call state (the phase-2 daemon restores those). See the [adapters guide](https://agentic-ai-risk-mitigation.github.io/Janus/adapters/) for the full security model, gate/policy semantics, and the verified `ask`/`escalate` probe results.
 
 ---
 
@@ -846,11 +875,15 @@ janus/
 │       ├── file_tools.py     # read_file, write_file, edit_file, list_directory
 │       └── command_tools.py  # run_command, fetch_url
 │
-└── adapters/
-    ├── _base.py              # Shared adapter utilities
-    ├── langchain.py          # LangChain integration
-    ├── adk.py                # Google ADK (Gemini) integration
-    └── claude_agent_sdk.py   # Claude Agent SDK (Claude Code) integration
+├── adapters/
+│   ├── _base.py              # Shared adapter utilities
+│   ├── langchain.py          # LangChain integration
+│   ├── adk.py                # Google ADK (Gemini) integration
+│   ├── claude_agent_sdk.py   # Claude Agent SDK (Claude Code) integration
+│   └── claude_code.py        # Claude Code CLI hook adapter (interactive `claude`)
+│
+└── cli/
+    └── hook.py               # `janus-hook` — the CLI hook shim (fails closed)
 
 examples/                     # Demo scenario framework + FastAPI web app + docker-compose.yml for SpiceDB
 tests/                        # Offline regression suite (+ tests/smoke/, opt-in live SDK checks)
