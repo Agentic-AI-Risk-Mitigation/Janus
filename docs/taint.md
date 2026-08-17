@@ -92,12 +92,13 @@ callbacks can share one safely.
 
 ## Automatic derivation with the Claude Agent SDK
 
-Pass `taint=` to [`janus_hooks()`](adapters.md) or `janus_options()` and both seams are wired
+Pass `session=Session(taint=tracker)` to [`janus_hooks()`](adapters.md) or `janus_options()`
+(a bare `taint=` tracker still works but is deprecated) and both seams are wired
 for you — a `PostToolUse` hook calls `record_output()`, and the `PreToolUse` hook runs
 `check()` **before** the static policy. No manual calls anywhere:
 
 ```python
-from janus.policy import TaintTracker
+from janus.policy import Session, TaintTracker
 from janus.adapters.claude_agent_sdk import janus_options
 
 tracker = TaintTracker(
@@ -108,7 +109,7 @@ tracker = TaintTracker(
 options = janus_options(
     TOOL_POLICY,
     mcp_servers={"research": server},
-    taint=tracker,
+    session=Session(taint=tracker),
     hook_approved_tools={"send_email"},   # sink must also clear the permission layer
 )
 ```

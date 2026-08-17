@@ -306,9 +306,10 @@ if reason:
 - Gating is whole-tool and argument-independent by design — the arguments are exactly what an
   injected instruction controls.
 - `classify=` adds content-aware labels on top of the static source map.
-- With the Claude Agent SDK adapter, derivation is **automatic**: pass `taint=tracker` to
-  `janus_hooks()` / `janus_options()` and the `PostToolUse` seam records reads while `PreToolUse`
-  gates sinks.
+- With the Claude Agent SDK adapter, derivation is **automatic**: pass
+  `session=Session(taint=tracker)` to `janus_hooks()` / `janus_options()` and the `PostToolUse`
+  seam records reads while `PreToolUse` gates sinks. (`taint=tracker` still works but is
+  deprecated; `Session` adds provenance and the audit trail.)
 
 Full reference: [Taint Tracking](https://agentic-ai-risk-mitigation.github.io/Janus/taint/). This
 is distinct from the PDE engine's manual session-scalar taint, which needs SpiceDB.
@@ -645,12 +646,13 @@ The hook seam alone leaves tool-level reachability hostage to the hook firing, a
 ```python
 from claude_agent_sdk import create_sdk_mcp_server
 from janus.adapters.claude_agent_sdk import janus_options
+from janus.policy import Session
 
 options = janus_options(
     TOOL_POLICY,
     mcp_servers={"research": create_sdk_mcp_server(name="research", tools=[...])},
     required_args={"fetch_page": ["url"]},
-    taint=tracker,                       # optional: automatic per-source taint gating
+    session=Session(taint=tracker),      # optional: automatic taint gating + provenance
     hook_approved_tools={"send_email"},  # optional: sinks must clear hook *and* permission layer
     output_format={"type": "json_schema", "schema": SCHEMA},   # extra kwargs forwarded
 )
@@ -696,17 +698,18 @@ Unexpected exceptions inside the hook (enforcer bug, malformed input) return a *
 
 #### Automatic taint — the `PostToolUse` seam
 
-Pass `taint=` a [`TaintTracker`](#taint-tracking-ipi-defence) and both seams are wired: `PostToolUse` derives session taint from tool outputs, and `PreToolUse` gates sinks on it before the static policy runs. No manual `update_taint()` calls:
+Pass `session=` a `Session` wrapping a [`TaintTracker`](#taint-tracking-ipi-defence) and both seams are wired: `PostToolUse` derives session taint from tool outputs, and `PreToolUse` gates sinks on it before the static policy runs. No manual `update_taint()` calls:
 
 ```python
-from janus.policy import TaintTracker
+from janus.policy import Session, TaintTracker
 from janus.adapters.claude_agent_sdk import janus_hooks
 
 tracker = TaintTracker(sources={"fetch_page": "web"}, gates={"send_email": "*"})
-options = ClaudeAgentOptions(..., hooks=janus_hooks(TOOL_POLICY, taint=tracker))
+options = ClaudeAgentOptions(..., hooks=janus_hooks(TOOL_POLICY, session=Session(taint=tracker)))
 ```
 
-Use one tracker per session; blocked calls never taint it.
+Use one session per agent conversation; blocked calls never taint it. (Passing a bare
+`taint=tracker` still works but is deprecated — `Session` adds provenance and the audit trail.)
 
 #### Alternative seam — `can_use_tool` callback
 

@@ -72,13 +72,15 @@ What it generates:
   enumerated and require an explicit `allowed_tools=` merge (still policy-filtered).
 - **`permission_mode="dontAsk"`** — anything not allow-listed is denied, not prompted.
 - **`hooks=janus_hooks(...)`** — the argument-level seam, wired with the same knobs
-  (`required_args`, `taint`, `resolve_name`, `passthrough_tools`).
+  (`required_args`, `session`, `resolve_name`, `passthrough_tools`).
 
 Three extra knobs:
 
-- **`taint=TaintTracker(...)`** — wires *both* hook seams so session taint is derived
-  automatically: a `PostToolUse` hook records untrusted reads, and the `PreToolUse` hook gates
-  sinks on them before the static policy runs. See [Taint Tracking](taint.md).
+- **`session=Session(taint=TaintTracker(...))`** — wires *both* hook seams so session taint is
+  derived automatically: a `PostToolUse` hook records untrusted reads, and the `PreToolUse` hook
+  gates sinks on them before the static policy runs. `Session` also carries provenance and the
+  audit trail; passing a bare `taint=` tracker still works but is deprecated. See
+  [Taint Tracking](taint.md).
 
 - **`hook_approved_tools={"send_email"}`** — high-risk sinks kept *off* `allowed_tools` even
   though mounted and policy-listed. The Janus hook approves them explicitly on allow, so under
@@ -132,22 +134,24 @@ ready `hooks=` dict.
 ### Automatic taint — the `PostToolUse` seam
 
 A static policy judges one call at a time, so it cannot express "don't send email *after* reading
-an untrusted web page." Pass a `TaintTracker` and both seams get wired: `PostToolUse` derives
-taint from tool outputs, `PreToolUse` gates sinks on it *before* the policy runs.
+an untrusted web page." Pass a `Session` wrapping a `TaintTracker` and both seams get wired:
+`PostToolUse` derives taint from tool outputs, `PreToolUse` gates sinks on it *before* the
+policy runs.
 
 ```python
-from janus.policy import TaintTracker
+from janus.policy import Session, TaintTracker
 from janus.adapters.claude_agent_sdk import janus_hooks
 
 tracker = TaintTracker(
     sources={"fetch_page": "web", "read_email": "email"},
     gates={"send_email": "*"},      # Rule of Two: no outbound send after any untrusted read
 )
-options = ClaudeAgentOptions(..., hooks=janus_hooks(TOOL_POLICY, taint=tracker))
+options = ClaudeAgentOptions(..., hooks=janus_hooks(TOOL_POLICY, session=Session(taint=tracker)))
 ```
 
-Use one tracker per session and call `tracker.reset()` only at session boundaries. Blocked calls
-don't taint the session — only calls that actually returned a response are recorded.
+Use one session per agent conversation and call `tracker.reset()` only at session boundaries.
+Blocked calls don't taint the session — only calls that actually returned a response are
+recorded. (A bare `taint=tracker` still works but is deprecated.)
 `janus_posttooluse_hook()` returns the raw callback if you are assembling matchers by hand.
 Full reference: [Taint Tracking](taint.md).
 
