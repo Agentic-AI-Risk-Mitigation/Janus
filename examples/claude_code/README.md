@@ -1,7 +1,11 @@
 # Starter policy for the Claude Code CLI
 
 `policy.starter.json` is a ready-to-copy gate-mode policy for guarding an interactive
-`claude` session with `janus-hook`. Wiring instructions:
+`claude` session with `janus-hook`. To have it written and wired for you — customized by a
+few questions and verified afterwards — run `janus init` instead; it builds this same
+policy from `janus.cli.starter_policy.build_starter_policy()`, and a test pins the two
+together so the file you copy and the file the wizard writes cannot drift. Wiring
+instructions:
 [Getting Started → Guard Your Interactive Claude Code](../../docs/getting-started.md);
 security model and flag reference: `docs/adapters.md`; choosing a delivery vehicle:
 `docs/claude-code-deployment.md`.

@@ -46,6 +46,55 @@ Three tiers, three guarantees:
 The plugin and managed tiers ship in later phases; the design and verified probe results
 live in `plans/claude-code-plugin-design.md` in the repository.
 
+## Wizard setup (`janus init`)
+
+`janus init` builds the tier-1 deployment — policy, `PreToolUse` hook, and the
+`permissions.deny` backstop — from a short interactive questionnaire. It is a convenience
+over the manual steps in [Getting Started](getting-started.md), not a different security
+posture: what it writes is a settings-file hook deployment, with tier 1's guarantees and
+tier 1's limits.
+
+What it touches, and nothing else:
+
+| Path | Contents |
+|---|---|
+| `.claude/janus/policy.json` | the policy, built from the starter plus your answers |
+| `.claude/settings*.json` | the `PreToolUse` entry (with an explicit `timeout`) and the merged `permissions.deny` |
+| `.claude/janus/config.json` | only when you name MCP servers — the `known_servers` sidecar |
+
+Operational notes:
+
+- **Scope** is the first question: `.claude/settings.json` (shared with the team),
+  `.claude/settings.local.json` (just you), or `~/.claude/settings.json` (every project).
+  On Windows the project default is the `.local` file, because the hook command must carry
+  absolute paths there and a shared file would be machine-specific.
+- **Re-running is idempotent.** A Janus hook is recognized by its command, so a second run
+  updates the entry rather than appending one; duplicate entries from hand-editing collapse
+  to one. Foreign hooks and their order are never touched.
+- **`permissions.deny` merges additively.** Entries you added by hand survive. Relaxing an
+  answer (allowing `git push`, opening the network) never silently removes a deny — the
+  wizard asks first.
+- **The previous settings file is backed up** to `settings.json.bak-<timestamp>` before
+  every write, and the new file lands via an atomic replace.
+- **Verification runs the deployed path**, feeding synthetic `PreToolUse` payloads through
+  `handle_cli_payload` with the exact flags it just wrote. A failing probe exits non-zero
+  with the files still written, so you can inspect the policy.
+- **`--yes` is for CI.** Without it, a non-TTY stdin is refused rather than silently
+  accepting defaults nobody chose.
+- **PATH matters.** Claude runs hooks through its own shell; if `janus-hook` is not
+  resolvable there the hook fails *open*. The wizard warns when the console script is not
+  on PATH and falls back to a `python -m janus.cli.hook` command pinned to the interpreter
+  that has Janus installed. This is one more reason the backstop is not optional.
+- **On Windows the shim's `--deadline` is inert** (it needs POSIX signals), so a wedged
+  decision falls through to the CLI's hook timeout, which fails open. The wizard says so at
+  the end of a Windows run.
+
+The same caveat as every tier-1 deployment applies, and the wizard concentrates it: the
+file it writes is a file the guarded agent can also write. The starter policy denies
+`Write`/`Edit` of `.claude/settings*.json` and the Janus directory, but `Bash` can route
+around that, and an agent that can run commands can run `janus init` itself. Treat tier 1
+as a policy monitor; move to the plugin tier when you need the session to stay guarded.
+
 ## Why managed settings must use the force-enabled-plugin path
 
 The "obvious" enterprise design — declare the hooks inline in managed settings, skip the

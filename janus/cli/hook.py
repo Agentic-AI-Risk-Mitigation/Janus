@@ -218,7 +218,13 @@ def _decide(args: argparse.Namespace, payload: dict) -> dict:
     )
 
 
-def _doctor() -> int:
+def run_doctor() -> int:
+    """Self-test: imports, policy round-trip, and the degraded-mode banner.
+
+    Public because ``janus init`` ends by running it — a wizard that reports
+    success without exercising the path it just wired is reporting on its own
+    intentions rather than on the deployment.
+    """
     ok = True
     print(f"python: {sys.version.split()[0]} ({sys.executable})")
     try:
@@ -255,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
 
     if args.command == "doctor":
-        return _doctor()
+        return run_doctor()
     if args.command == "backstop":
         from janus.adapters.claude_code import DEFAULT_CLI_SINK_DENY
 

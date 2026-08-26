@@ -35,6 +35,24 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`janus init` — an onboarding wizard, behind a new `janus` console script.** Setting Janus
+  up on the Claude Code CLI previously meant hand-writing a policy, pasting a hooks block into
+  a settings file, and merging the backstop by hand; a guard nobody finishes installing
+  protects nothing. `janus init` asks a handful of questions (scope, what to protect, network
+  posture, git posture, MCP servers, strictness), shows the exact settings diff, and on
+  confirmation writes the policy, the `PreToolUse` entry — with the explicit `timeout` the docs
+  always asked for and no example ever showed — and the `permissions.deny` backstop. It then
+  verifies by feeding synthetic payloads through `handle_cli_payload` with the flags it just
+  wrote, so a `PASS` reflects the deployed decision path rather than the wizard's intent.
+  Re-running updates the existing hook in place; foreign hooks, foreign deny entries, and
+  unrelated settings are never touched, and the previous file is backed up. `--dry-run`,
+  `--yes` (CI; a non-TTY without it is refused rather than defaulted), `--scope`, `--force`.
+  Optional: with the `generate` extra and an API key, it can draft argument-level rules for
+  review — accepting *replaces* a tool's blanket allow, since generated priority-100 rules
+  would otherwise sit unreachable behind it.
+  The `janus` script is deliberately separate from `janus-hook`, which stays a pure
+  decision process with no interactive surface. `janus doctor` delegates to the same
+  `janus.cli.hook.run_doctor` (renamed from `_doctor`) that `janus-hook doctor` uses.
 - **Claude Code CLI adapter** (`janus.adapters.claude_code` + the `janus-hook` console script,
   core install — no extra): enforce a Janus policy on the *interactive* `claude` CLI via its
   `PreToolUse`/`PostToolUse` hooks. Unlike the SDK path, Janus does not construct the session
