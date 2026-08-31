@@ -276,6 +276,11 @@ doc.
 
 ### Wiring it (phase 1: settings file, stateless)
 
+`janus init` does all of the below interactively — policy, hook entry, and backstop — and
+verifies the result through this same decision path; see
+[Claude Code Deployment → Wizard setup](claude-code-deployment.md#wizard-setup-janus-init).
+By hand:
+
 ```bash
 janus-hook backstop > /tmp/backstop.json   # the permissions.deny block; merge into settings
 ```
@@ -285,7 +290,8 @@ janus-hook backstop > /tmp/backstop.json   # the permissions.deny block; merge i
   "hooks": {
     "PreToolUse": [
       { "hooks": [{ "type": "command",
-                    "command": "janus-hook pre --policy /etc/janus/policy.json --mode gate" }] }
+                    "command": "janus-hook pre --policy /etc/janus/policy.json --mode gate",
+                    "timeout": 10 }] }
     ]
   }
 }

@@ -6,6 +6,32 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Path policies did not match on Windows — every secret-read deny was silently allowed
+  there.** Claude Code reports `tool_input.file_path` with the *host's* separator
+  (`C:\Users\...\.env`, verified against a live CLI 2.1.246 session), while the starter
+  policy anchored on `/`. Against the previous starter, reads of `.env`, `~/.ssh/id_rsa`,
+  `~/.aws/credentials` and `~/.claude/.credentials.json` were all **allowed** on Windows, as
+  were writes to `.claude/settings.json` — the rule meant to stop an agent disarming the
+  guard. Only `\.pem$` held, being the one pattern needing no separator. Path patterns now
+  use a separator class (`janus.cli.starter_policy.SEP`, `[/\\]`), user-supplied paths are
+  normalized the same way, and `examples/claude_code/policy.starter.json` is regenerated to
+  match. A Windows payload fixture captured from a live session
+  (`tests/fixtures/claude_code_payloads/pretooluse.windows-read.json`) pins it. The bug was
+  invisible because every prior fixture, and the whole CI matrix, was Linux.
+- **`janus init` verification reported PASS against paths the CLI never sends.** Its probes
+  built paths with `as_posix()`, so on Windows they exercised forward slashes while the
+  deployment received backslashes — seven green checks on a policy that was allowing `.env`
+  reads. Probes now use the host's native separator.
+- **The `janus-hook` deadline was inert on Windows.** `_deadline` needs `SIGALRM`, so on
+  Windows it degraded to no deadline at all, and a wedged decision ran until the CLI's own
+  hook timeout — which fails **open**. A worker-thread fallback restores the property: the
+  shim reaches its own limit and emits a deny while it still can. This also fixes the one
+  test that had been failing on Windows.
+- CI now runs the suite on `windows-latest` as well as `ubuntu-latest`. All three bugs above
+  were platform-specific and a Linux-only matrix could not see any of them.
+
 ### Changed
 
 - **BREAKING — `openai` and `jinja2` moved out of core dependencies** into the new `generate`
@@ -35,6 +61,24 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`janus init` — an onboarding wizard, behind a new `janus` console script.** Setting Janus
+  up on the Claude Code CLI previously meant hand-writing a policy, pasting a hooks block into
+  a settings file, and merging the backstop by hand; a guard nobody finishes installing
+  protects nothing. `janus init` asks a handful of questions (scope, what to protect, network
+  posture, git posture, MCP servers, strictness), shows the exact settings diff, and on
+  confirmation writes the policy, the `PreToolUse` entry — with the explicit `timeout` the docs
+  always asked for and no example ever showed — and the `permissions.deny` backstop. It then
+  verifies by feeding synthetic payloads through `handle_cli_payload` with the flags it just
+  wrote, so a `PASS` reflects the deployed decision path rather than the wizard's intent.
+  Re-running updates the existing hook in place; foreign hooks, foreign deny entries, and
+  unrelated settings are never touched, and the previous file is backed up. `--dry-run`,
+  `--yes` (CI; a non-TTY without it is refused rather than defaulted), `--scope`, `--force`.
+  Optional: with the `generate` extra and an API key, it can draft argument-level rules for
+  review — accepting *replaces* a tool's blanket allow, since generated priority-100 rules
+  would otherwise sit unreachable behind it.
+  The `janus` script is deliberately separate from `janus-hook`, which stays a pure
+  decision process with no interactive surface. `janus doctor` delegates to the same
+  `janus.cli.hook.run_doctor` (renamed from `_doctor`) that `janus-hook doctor` uses.
 - **Claude Code CLI adapter** (`janus.adapters.claude_code` + the `janus-hook` console script,
   core install — no extra): enforce a Janus policy on the *interactive* `claude` CLI via its
   `PreToolUse`/`PostToolUse` hooks. Unlike the SDK path, Janus does not construct the session

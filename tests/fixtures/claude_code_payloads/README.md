@@ -15,6 +15,35 @@ against a newer CLI and update this provenance block.
   general-purpose subagent via the `Agent` tool. Design context:
   `plans/claude-code-plugin-design.md` §10.
 
+`pretooluse.windows-read.json` is a **second capture, on a different platform**:
+
+- Captured: 2026-08-31
+- CLI: **2.1.246** (Claude Code), Windows 11
+- Method: same — a `command` hook appending stdin to a file, one `claude -p` run
+  reading a file in the project directory.
+
+## Paths use the host's native separator
+
+The Windows capture exists because every fixture above it is from Linux, and
+that gap hid a live bug: `tool_input.file_path` arrives as
+`C:\Users\...\README.md` on Windows, so a policy pattern anchored on `/` alone
+matches **nothing** there. Against the pre-fix starter policy, reads of `.env`,
+`~/.ssh/id_rsa`, `~/.aws/credentials` and `~/.claude/.credentials.json` were all
+*allowed* on Windows, as was writing `.claude/settings.json` — the rule meant to
+stop an agent disarming the guard. Only `\.pem$` held, because it is the one
+pattern needing no separator.
+
+Path patterns must therefore use a separator **class** (`[/\\]`), not a slash;
+`janus.cli.starter_policy.SEP` exists for this. The same applies to anything
+that constructs a probe or test path: build it with the native separator
+(`str(Path)`), never `as_posix()`, or the test will pass against a string the
+deployment never sees.
+
+The environment a `command` hook runs with also carries `CLAUDE_PROJECT_DIR`
+(verified on 2.1.246; on Windows its value uses *forward* slashes), which is
+what makes the `$CLAUDE_PROJECT_DIR/...` form in a POSIX project-scoped hook
+command resolve.
+
 ## Findings the fixtures pin (where they contradict the docs, the fixtures win)
 
 - **`PostToolUse` carries `tool_response`, NOT `tool_output`, on CLI 2.1.233** —

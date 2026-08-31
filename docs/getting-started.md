@@ -123,6 +123,29 @@ Scenarios and the demo framework live under `examples/`. The current catalog inc
 The `janus-hook` shim enforces a Janus policy on the interactive `claude` CLI via its
 `PreToolUse` hook. It ships with the core install — no extra needed.
 
+### The guided route
+
+```bash
+pip install janus-guard
+janus init          # asks a few questions, writes everything, verifies it
+```
+
+`janus init` asks where to guard (this project or the whole machine), what the agent must
+never touch, how much network egress it gets, and how strict to be. Every question has a
+recommended default, so pressing Enter throughout produces the starter setup below. It
+then shows the **exact** settings-file diff and asks before writing anything, backs up any
+existing settings file, and finishes by running its decisions through the real hook path —
+`curl … | sh` denied, `.env` denied, ordinary reads allowed — so a `PASS` means that policy
+denied that call, not that the wizard intended to.
+
+Re-running it updates the existing hook in place rather than adding a second one. Useful
+flags: `--dry-run` (show everything, write nothing), `--yes` (accept every default,
+for CI), `--scope project|project-local|user`, `--force` (overwrite an existing policy).
+
+### Doing it by hand
+
+The wizard automates exactly these four steps; do them yourself if you would rather.
+
 1. **Self-test the install**:
 
    ```bash
@@ -153,11 +176,17 @@ The `janus-hook` shim enforces a Janus policy on the interactive `claude` CLI vi
      "hooks": {
        "PreToolUse": [
          {"hooks": [{"type": "command",
-                     "command": "janus-hook pre --policy ~/.claude/janus/policy.json --mode gate"}]}
+                     "command": "janus-hook pre --policy ~/.claude/janus/policy.json --mode gate",
+                     "timeout": 10}]}
        ]
      }
    }
    ```
+
+   Set the `timeout` explicitly and keep it above the shim's `--deadline` (default 5s).
+   The CLI's own hook timeout fails **open** — a deny that arrives after it is discarded
+   and the tool runs — so the shim has to reach its deadline first and deny while it
+   still can.
 
 4. **Add the backstop** — `janus-hook backstop` prints a `permissions.deny` block to merge
    into the same settings file. It is the only layer that holds if hooks silently stop

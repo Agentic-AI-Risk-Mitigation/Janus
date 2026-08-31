@@ -732,18 +732,32 @@ guarded = guard_tool_body("fetch_page", my_async_body, TOOL_POLICY,
 
 The security model is genuinely weaker than the SDK path's, and the docs say so up front: on the CLI, **Janus is a policy monitor over a session it does not own, backstopped by `permissions.deny` — not a reachability lockdown.** The human constructs the session, so the SDK path's `tools=[]`/`strict_mcp_config`/`allowed_tools` layers are simply gone.
 
-Wire the `janus-hook` shim into a settings file:
+The fastest way in is `janus init` — it asks a few questions (what to protect, network and
+git posture, how strict), writes the policy, the hook wiring, and the `permissions.deny`
+backstop, shows you the settings diff before touching anything, and then verifies the
+result through the real decision path:
+
+```bash
+pip install janus-guard
+janus init            # --dry-run to preview, --yes for CI
+```
+
+Or wire the `janus-hook` shim into a settings file yourself:
 
 ```json
 {
   "hooks": {
     "PreToolUse": [
       { "hooks": [{ "type": "command",
-                    "command": "janus-hook pre --policy /etc/janus/policy.json --mode gate" }] }
+                    "command": "janus-hook pre --policy /etc/janus/policy.json --mode gate",
+                    "timeout": 10 }] }
     ]
   }
 }
 ```
+
+Keep the hook's `timeout` above the shim's `--deadline` (default 5s): the CLI's own hook
+timeout fails **open**, so the shim must reach its deadline first and deny while it can.
 
 `--mode gate` (default) enforces the tools the policy has an opinion about and abstains to the CLI's own permission flow elsewhere; `--mode policy` is strict default-deny. Gate mode auto-promotes to policy mode under `bypassPermissions`, where abstention would be a silent allow — so bypass sessions need the policy to enumerate their tool surface. The shim fails **closed** (unreadable policy, internal error, or its own `--deadline` all deny), which matters because the CLI's hook dispatch fails **open** on timeout. `janus-hook doctor` self-tests the install; `janus-hook backstop` prints the `permissions.deny` block that holds even if hooks stop running.
 
@@ -883,7 +897,12 @@ janus/
 │   └── claude_code.py        # Claude Code CLI hook adapter (interactive `claude`)
 │
 └── cli/
-    └── hook.py               # `janus-hook` — the CLI hook shim (fails closed)
+    ├── hook.py               # `janus-hook` — the CLI hook shim (fails closed)
+    ├── main.py               # `janus` — operator commands (init, doctor)
+    ├── init.py               # the `janus init` onboarding wizard
+    ├── starter_policy.py     # starter-policy builder + Claude Code tool table
+    ├── claude_settings.py    # settings.json read/merge/backup/write
+    └── _console.py           # stdlib prompts (no TUI dependency)
 
 examples/                     # Demo scenario framework + FastAPI web app + docker-compose.yml for SpiceDB
 tests/                        # Offline regression suite (+ tests/smoke/, opt-in live SDK checks)
