@@ -85,9 +85,10 @@ Operational notes:
   resolvable there the hook fails *open*. The wizard warns when the console script is not
   on PATH and falls back to a `python -m janus.cli.hook` command pinned to the interpreter
   that has Janus installed. This is one more reason the backstop is not optional.
-- **On Windows the shim's `--deadline` is inert** (it needs POSIX signals), so a wedged
-  decision falls through to the CLI's hook timeout, which fails open. The wizard says so at
-  the end of a Windows run.
+- **Path patterns match either separator.** Claude Code reports `file_path` using the
+  host's native separator (`C:\Users\...\.env` on Windows, verified on CLI 2.1.246), so
+  every path rule the wizard writes uses a `[/\\]` class. A `/`-only pattern silently
+  matches nothing on Windows — if you hand-edit the policy, keep the class.
 
 The same caveat as every tier-1 deployment applies, and the wizard concentrates it: the
 file it writes is a file the guarded agent can also write. The starter policy denies

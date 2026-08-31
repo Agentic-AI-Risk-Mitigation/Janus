@@ -22,9 +22,14 @@ Three invariants every rule here preserves, each load-bearing:
   under ``bypassPermissions``, where an unlisted tool is denied outright rather
   than deferred to a prompt. The bare allow entries keep those sessions working.
 
-Regex conditions are ``re.search``, not full matches, so every pattern below
-anchors deliberately: ``(^|/)\\.env`` rather than ``\\.env`` (which would also
-hit ``.environment``), ``\\.pem$`` rather than ``\\.pem``.
+Two properties of the patterns themselves, both learned the hard way:
+
+* **Conditions are ``re.search``, not full matches**, so anchor deliberately —
+  ``(^|SEP)\\.env`` rather than a bare ``\\.env``, ``\\.pem$`` rather than
+  ``\\.pem``. (The anchoring bounds *where* a match may start; it does not make
+  the match exact. ``(^|SEP)\\.env…[^SEP]*$`` still covers ``.environment``,
+  which is the safe direction to be wrong in.)
+* **Separators must be a class, never a slash.** See :data:`SEP`.
 """
 
 from __future__ import annotations
@@ -37,23 +42,41 @@ from typing import Any
 # Pattern fragments
 # ---------------------------------------------------------------------------
 
+#: Path separator, either flavour.
+#:
+#: Not cosmetic, and not theoretical: Claude Code reports ``file_path`` using
+#: the host's native separator, so on Windows a policy anchored on ``/`` alone
+#: silently matches nothing. Verified against a live 2.1.246 session, which
+#: sent ``C:\Users\...\README.md`` — under a ``/``-only pattern every one of the
+#: secret-read denies below, and the guard-tamper deny, allowed the call. Any
+#: new path pattern must use this class rather than a bare slash.
+SEP = r"[/\\]"
+
+#: Non-separator character, for "rest of the final path segment" tails.
+NOT_SEP = r"[^/\\]"
+
 #: Files a coding agent has no business reading. ``.env.example`` is exempted
 #: by negative lookahead — it is checked into most repos on purpose.
 SECRET_READ_PATTERN = (
-    r"(^|/)\.env(?!\.example)[^/]*$|/\.ssh/|/\.aws/credentials|\.pem$"
-    r"|/\.claude/\.credentials\.json$"
+    rf"(^|{SEP})\.env(?!\.example){NOT_SEP}*$"
+    rf"|{SEP}\.ssh{SEP}"
+    rf"|{SEP}\.aws{SEP}credentials"
+    r"|\.pem$"
+    rf"|{SEP}\.claude{SEP}\.credentials\.json$"
 )
 
 #: Pipe-to-shell downloads and direct reads of credential material. The
 #: ``[^|;&]*`` between the fetch and the pipe keeps the alternation from
 #: spanning an unrelated later command in a compound line.
 BASH_EXFIL_PATTERN = (
-    r"(curl|wget)[^|;&]*\|\s*(ba|z|fi)?sh\b|/\.ssh/id_|/\.aws/credentials"
-    r"|/\.claude/\.credentials"
+    r"(curl|wget)[^|;&]*\|\s*(ba|z|fi)?sh\b"
+    rf"|{SEP}\.ssh{SEP}id_"
+    rf"|{SEP}\.aws{SEP}credentials"
+    rf"|{SEP}\.claude{SEP}\.credentials"
 )
 
 #: Writes that would disable the guard itself.
-GUARD_TAMPER_PATTERN = r"/\.claude/settings(\.local)?\.json$|/\.claude/janus/"
+GUARD_TAMPER_PATTERN = rf"{SEP}\.claude{SEP}settings(\.local)?\.json$|{SEP}\.claude{SEP}janus{SEP}"
 
 #: Network clients, anchored at command position so ``foo --curl`` and a path
 #: containing "nc" do not match. Mirrors the ``permissions.deny`` backstop's
@@ -142,13 +165,20 @@ def pattern_for_entry(entry: str) -> str:
     suffix glob (``*.key``). Everything is escaped — a stray ``.`` or ``(`` in a
     filename must not become a metacharacter — with ``*.ext`` translated to an
     anchored suffix match, since that is the one glob people reach for.
+
+    Separators are normalized to :data:`SEP` so an entry typed one way matches a
+    path reported the other. Someone who types ``secrets/`` on Windows means the
+    directory, not the slash.
     """
     entry = entry.strip()
     if not entry:
         return ""
     if entry.startswith("*.") and len(entry) > 2:
         return re.escape(entry[1:]) + "$"
-    return re.escape(entry)
+    # Normalize first so both flavours collapse to one placeholder, then splice
+    # the separator class in after escaping (escaping would mangle the class).
+    normalized = entry.replace("\\", "/")
+    return SEP.join(re.escape(part) for part in normalized.split("/"))
 
 
 def _entry_patterns(entries: Sequence[str]) -> list[str]:

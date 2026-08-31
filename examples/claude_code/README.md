@@ -38,9 +38,18 @@ name — the `mcp__<server>__` prefix is stripped) with an allow rule, and set
 `known_servers` in the `--config` sidecar so a rogue server can't inherit the rule.
 
 **Regex conditions are searches, not full matches.** JSON Schema `pattern` matches anywhere
-in the string (Python `re.search`), so anchor deliberately: `(^|/)\.env` rather than
-`\.env` (which would also hit `.environment`), `\.pem$` rather than `\.pem`. Negative
-lookahead works — `\.env(?!\.example)` is how the starter exempts `.env.example`.
+in the string (Python `re.search`), so anchor deliberately: `(^|[/\\])\.env` rather than a
+bare `\.env`, `\.pem$` rather than `\.pem`. Negative lookahead works —
+`\.env(?!\.example)` is how the starter exempts `.env.example`. Anchoring bounds where a
+match may *start*; it does not make the match exact, so the starter's `.env` rule also
+covers `.environment` — the safe direction to be wrong in.
+
+**Match both path separators.** Claude Code reports `file_path` with the *host's* separator
+— verified on Windows (CLI 2.1.246), which sends `C:\Users\...\.env`. A pattern anchored on
+`/` alone matches nothing there, so use a class: `[/\\]` for a separator and `[^/\\]` for a
+"rest of the segment" tail. This is not hypothetical: an earlier version of this starter was
+`/`-only, and on Windows it allowed every `.env`, `~/.ssh`, `~/.aws/credentials` and
+`~/.claude/.credentials.json` read, plus writes to `.claude/settings.json`.
 
 **Deny conditions fail closed on absent arguments; allow conditions fail strict.** A deny
 rule conditioning an argument the call omits *matches vacuously*; an allow rule

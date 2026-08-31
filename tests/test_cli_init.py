@@ -13,6 +13,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -44,6 +45,13 @@ STARTER_JSON = REPO_ROOT / "examples" / "claude_code" / "policy.starter.json"
 SETTINGS_FIXTURES = Path(__file__).parent / "fixtures" / "claude_settings"
 
 HOOK_COMMAND = "janus-hook pre --policy /etc/janus/policy.json --mode gate"
+
+#: Non-interactive run pinned to one scope. The *default* scope is
+#: platform-dependent (`.local` on Windows, shared elsewhere), so a test that
+#: asserts a particular settings filename has to name the scope rather than
+#: inherit it — otherwise it passes on the author's machine and fails on CI.
+#: `_default_scope` itself is covered separately, on both branches.
+LOCAL = ["init", "--yes", "--scope", "project-local"]
 
 
 def settings_fixture(name: str) -> dict:
@@ -85,8 +93,39 @@ class TestStarterPolicy:
     def test_extra_secret_patterns_reach_the_read_deny(self):
         policy = build_starter_policy(extra_secret_patterns=["secrets/", "*.key"])
         pattern = policy["Read"][0]["conditions"]["file_path"]["pattern"]
-        assert "secrets/" in pattern
+        assert r"secrets[/\\]" in pattern
         assert r"\.key$" in pattern
+
+    def test_secret_denies_match_both_path_separators(self):
+        """Claude Code reports file_path with the *host's* separator, verified
+        against a live Windows session. A `/`-only pattern silently matches
+        nothing there — every secret read would be allowed."""
+        pattern = build_starter_policy(extra_secret_patterns=["secrets/"])["Read"][0]["conditions"][
+            "file_path"
+        ]["pattern"]
+        for path in (
+            r"C:\Users\me\proj\.env",
+            r"C:\Users\me\.ssh\id_rsa",
+            r"C:\Users\me\.aws\credentials",
+            r"C:\Users\me\.claude\.credentials.json",
+            r"C:\proj\secrets\prod.txt",
+            "/home/me/proj/.env",
+            "/home/me/.ssh/id_rsa",
+            "/home/me/proj/secrets/prod.txt",
+        ):
+            assert re.search(pattern, path), f"{path} was not denied"
+        assert not re.search(pattern, "/home/me/proj/.env.example")
+
+    def test_guard_tamper_denies_match_both_separators(self):
+        pattern = build_starter_policy()["Write"][0]["conditions"]["file_path"]["pattern"]
+        for path in (
+            r"C:\proj\.claude\settings.json",
+            r"C:\proj\.claude\settings.local.json",
+            r"C:\proj\.claude\janus\policy.json",
+            "/home/me/proj/.claude/settings.json",
+            "/home/me/proj/.claude/janus/policy.json",
+        ):
+            assert re.search(pattern, path), f"{path} was not denied"
 
     def test_network_and_git_push_toggles_reach_the_bash_deny(self):
         default = build_starter_policy()["Bash"][0]["conditions"]["command"]["pattern"]
@@ -115,8 +154,16 @@ class TestPatternForEntry:
     def test_metacharacters_are_escaped(self):
         """A filename is a literal. If `.` stayed a metacharacter, `prod.env`
         would also match `prodXenv` — and users type filenames, not regexes."""
-        assert pattern_for_entry("config/prod.yaml") == r"config/prod\.yaml"
+        assert pattern_for_entry("config/prod.yaml") == r"config[/\\]prod\.yaml"
         assert pattern_for_entry("a(b)c") == r"a\(b\)c"
+
+    def test_either_separator_typed_matches_either_separator_reported(self):
+        """Someone typing `secrets/` on Windows means the directory, not the
+        slash — and the CLI will report that path with backslashes."""
+        for typed in ("logs/private", "logs\\private"):
+            pattern = pattern_for_entry(typed)
+            assert re.search(pattern, r"C:\app\logs\private\dump.txt")
+            assert re.search(pattern, "/srv/app/logs/private/dump.txt")
 
     def test_suffix_glob_becomes_an_anchored_suffix(self):
         assert pattern_for_entry("*.key") == r"\.key$"
@@ -331,7 +378,7 @@ class TestUmbrellaDispatch:
 class TestNonInteractive:
     def test_yes_writes_a_working_deployment(self, tmp_path, monkeypatch, capsys):
         proj = project(tmp_path, monkeypatch=monkeypatch)
-        code, out = run_init(["init", "--yes", "--project-dir", str(proj)], monkeypatch, capsys)
+        code, out = run_init(LOCAL + ["--project-dir", str(proj)], monkeypatch, capsys)
         assert code == 0, out
 
         policy_path = proj / ".claude" / "janus" / "policy.json"
@@ -367,7 +414,7 @@ class TestNonInteractive:
 
     def test_rerun_is_idempotent(self, tmp_path, monkeypatch, capsys):
         proj = project(tmp_path, monkeypatch=monkeypatch)
-        argv = ["init", "--yes", "--project-dir", str(proj), "--force"]
+        argv = LOCAL + ["--project-dir", str(proj), "--force"]
         run_init(argv, monkeypatch, capsys)
         settings_path = proj / ".claude" / "settings.local.json"
         first = json.loads(settings_path.read_text(encoding="utf-8"))
@@ -416,7 +463,7 @@ class TestWizardFlow:
         policy = json.loads(
             (proj / ".claude" / "janus" / "policy.json").read_text(encoding="utf-8")
         )
-        assert "secrets/" in policy["Read"][0]["conditions"]["file_path"]["pattern"]
+        assert r"secrets[/\\]" in policy["Read"][0]["conditions"]["file_path"]["pattern"]
         # git push allowed -> no push deny in the policy or the backstop
         assert "git" not in policy["Bash"][0]["conditions"]["command"]["pattern"]
 
@@ -441,7 +488,7 @@ class TestWizardFlow:
     def test_mcp_servers_produce_a_sidecar_and_config_flag(self, tmp_path, monkeypatch, capsys):
         proj = project(tmp_path, monkeypatch=monkeypatch)
         (proj / ".mcp.json").write_text(json.dumps({"mcpServers": {"research": {}, "tickets": {}}}))
-        code, out = run_init(["init", "--yes", "--project-dir", str(proj)], monkeypatch, capsys)
+        code, out = run_init(LOCAL + ["--project-dir", str(proj)], monkeypatch, capsys)
         assert code == 0, out
 
         sidecar = json.loads(
@@ -464,7 +511,7 @@ class TestWizardFlow:
         settings_path = proj / ".claude" / "settings.local.json"
         settings_path.write_text(json.dumps(settings_fixture("foreign-hooks")))
 
-        code, _ = run_init(["init", "--yes", "--project-dir", str(proj)], monkeypatch, capsys)
+        code, _ = run_init(LOCAL + ["--project-dir", str(proj)], monkeypatch, capsys)
         assert code == 0
 
         after = json.loads(settings_path.read_text(encoding="utf-8"))
@@ -473,6 +520,95 @@ class TestWizardFlow:
         assert "Bash(rm -rf:*)" in after["permissions"]["deny"]
         backups = list((proj / ".claude").glob("settings.local.json.bak-*"))
         assert len(backups) == 1, "the previous settings file was not backed up"
+
+
+class TestWindowsPayloads:
+    """Regression cover for a live bug: every other captured fixture is from
+    Linux, so `/`-anchored patterns looked correct while allowing every secret
+    read on Windows. These drive the real dispatcher with the real payload
+    shape, captured from CLI 2.1.246 on Windows 11."""
+
+    FIXTURES = Path(__file__).parent / "fixtures" / "claude_code_payloads"
+
+    def _decide(self, tmp_path, file_path, *, tool="Read"):
+        from janus.adapters.claude_code import handle_cli_payload
+
+        policy_path = tmp_path / "policy.json"
+        policy_path.write_text(json.dumps(build_starter_policy()), encoding="utf-8")
+
+        payload = json.loads(
+            (self.FIXTURES / "pretooluse.windows-read.json").read_text(encoding="utf-8")
+        )
+        payload["tool_name"] = tool
+        payload["tool_input"] = {"file_path": file_path}
+        if tool == "Write":
+            payload["tool_input"]["content"] = "{}"
+
+        out = handle_cli_payload(payload, str(policy_path), mode="gate")
+        return out.get("hookSpecificOutput", {}).get("permissionDecision")
+
+    def test_the_fixture_really_carries_a_native_windows_path(self):
+        payload = json.loads(
+            (self.FIXTURES / "pretooluse.windows-read.json").read_text(encoding="utf-8")
+        )
+        assert "\\" in payload["tool_input"]["file_path"]
+        assert payload["hook_event_name"] == "PreToolUse"
+
+    @pytest.mark.parametrize(
+        "file_path",
+        [
+            r"C:\Users\Asus\proj\.env",
+            r"C:\Users\Asus\.ssh\id_rsa",
+            r"C:\Users\Asus\.aws\credentials",
+            r"C:\Users\Asus\.claude\.credentials.json",
+            r"C:\certs\server.pem",
+        ],
+    )
+    def test_backslash_secret_reads_are_denied(self, tmp_path, file_path):
+        assert self._decide(tmp_path, file_path) == "deny", (
+            f"{file_path} was ALLOWED — the separator class regressed"
+        )
+
+    def test_backslash_guard_tampering_is_denied(self, tmp_path):
+        assert self._decide(tmp_path, r"C:\proj\.claude\settings.json", tool="Write") == "deny"
+
+    def test_ordinary_backslash_reads_still_work(self, tmp_path):
+        """The negative control: a policy that denied everything would pass the
+        cases above while making the CLI unusable."""
+        assert self._decide(tmp_path, r"C:\Users\Asus\proj\README.md") is None
+
+
+class TestDefaultScope:
+    """Both branches run on every platform. The Windows branch exists because a
+    hook command there carries absolute paths, which makes a *shared* settings
+    file machine-specific."""
+
+    @staticmethod
+    def _env(tmp_path, *, is_project: bool):
+        from janus.cli import init as init_module
+
+        return init_module.WizardEnv(
+            project_dir=tmp_path, home=tmp_path / "home", has_claude_dir=is_project
+        )
+
+    def test_windows_project_defaults_to_the_private_file(self, tmp_path, monkeypatch):
+        from janus.cli import init as init_module
+
+        monkeypatch.setattr(init_module.os, "name", "nt")
+        assert init_module._default_scope(self._env(tmp_path, is_project=True)) == "project-local"
+
+    def test_posix_project_defaults_to_the_shared_file(self, tmp_path, monkeypatch):
+        from janus.cli import init as init_module
+
+        monkeypatch.setattr(init_module.os, "name", "posix")
+        assert init_module._default_scope(self._env(tmp_path, is_project=True)) == "project"
+
+    def test_a_non_project_directory_defaults_to_user_scope(self, tmp_path, monkeypatch):
+        from janus.cli import init as init_module
+
+        for name in ("nt", "posix"):
+            monkeypatch.setattr(init_module.os, "name", name)
+            assert init_module._default_scope(self._env(tmp_path, is_project=False)) == "user"
 
 
 class TestHookCommandQuoting:

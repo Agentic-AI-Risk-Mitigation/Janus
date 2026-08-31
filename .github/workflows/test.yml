@@ -7,11 +7,27 @@ on:
   workflow_dispatch:
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        # Windows is not incidental coverage. Claude Code reports `file_path`
+        # with the host separator, so a Linux-only matrix once let a policy
+        # ship that matched nothing on Windows — every secret-read deny was
+        # silently allowed there. Path handling is platform-specific enough
+        # that it has to be exercised on both.
+        os: [ubuntu-latest, windows-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13"]
+        exclude:
+          # Windows runs the full version sweep on one interpreter; the
+          # platform-specific code paths do not vary by Python version, and
+          # eight Windows runners per PR buys nothing.
+          - os: windows-latest
+            python-version: "3.10"
+          - os: windows-latest
+            python-version: "3.11"
+          - os: windows-latest
+            python-version: "3.12"
     steps:
       - uses: actions/checkout@v5
       - name: Setup uv

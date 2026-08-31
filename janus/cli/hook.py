@@ -35,6 +35,7 @@ import json
 import logging
 import signal
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -80,6 +81,11 @@ class _DeadlineExceeded(Exception):
     """The shim ran out of its own time budget."""
 
 
+def _has_sigalrm() -> bool:
+    """Whether this platform can interrupt the main thread on a timer."""
+    return hasattr(signal, "SIGALRM")
+
+
 @contextlib.contextmanager
 def _deadline(seconds: float):
     """Bound the decision by our own clock, not the CLI's.
@@ -91,23 +97,61 @@ def _deadline(seconds: float):
     regex in a condition), the shim has to reach its own limit first and emit a
     deny while it still can.
 
-    ``SIGALRM`` is POSIX-only; where it is unavailable this degrades to no
-    deadline, which is the pre-existing behaviour rather than a regression.
+    ``SIGALRM`` is POSIX-only. On Windows the caller uses
+    :func:`_decide_within_deadline` instead — see there for why the fallback
+    could not simply live in this context manager.
     """
-    if seconds <= 0 or not hasattr(signal, "SIGALRM"):
+    if seconds <= 0 or not _has_sigalrm():
         yield
         return
 
     def on_alarm(signum, frame):
         raise _DeadlineExceeded(f"decision exceeded {seconds:g}s")
 
-    previous = signal.signal(signal.SIGALRM, on_alarm)
-    signal.setitimer(signal.ITIMER_REAL, seconds)
+    # `type: ignore` because these names do not exist on Windows and mypy is
+    # platform-aware; `_has_sigalrm()` above is the runtime guard.
+    previous = signal.signal(signal.SIGALRM, on_alarm)  # type: ignore[attr-defined]
+    signal.setitimer(signal.ITIMER_REAL, seconds)  # type: ignore[attr-defined]
     try:
         yield
     finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)
-        signal.signal(signal.SIGALRM, previous)
+        signal.setitimer(signal.ITIMER_REAL, 0)  # type: ignore[attr-defined]
+        signal.signal(signal.SIGALRM, previous)  # type: ignore[attr-defined]
+
+
+def _decide_within_deadline(args: argparse.Namespace, payload: dict) -> dict:
+    """Windows deadline: run the decision in a worker and abandon it if late.
+
+    A context manager cannot preempt its own body without signals, so the
+    POSIX path above has no Windows equivalent — for a long time this degraded
+    to *no deadline at all* there, which meant the one platform without a
+    working timer was also the one where a wedged decision ran until the CLI's
+    timeout and then failed **open**.
+
+    Running the decision in a daemon thread restores the property. If the
+    worker is still going when the budget expires we raise, ``main`` emits its
+    fail-closed deny, and the process exits with the answer already written;
+    the abandoned thread cannot hold exit up because it is a daemon. We do not
+    try to kill it — Python offers no safe way to, and a deny that is *sent* is
+    worth more than a thread that is tidily reclaimed.
+    """
+    outcome: dict[str, Any] = {}
+
+    def work() -> None:
+        try:
+            outcome["value"] = _decide(args, payload)
+        except BaseException as exc:  # re-raised on the main thread below
+            outcome["error"] = exc
+
+    worker = threading.Thread(target=work, name="janus-decide", daemon=True)
+    worker.start()
+    worker.join(args.deadline)
+
+    if worker.is_alive():
+        raise _DeadlineExceeded(f"decision exceeded {args.deadline:g}s")
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome["value"]
 
 
 def _load_config(path: str | None) -> dict[str, Any]:
@@ -199,6 +243,8 @@ def _run_hook(args: argparse.Namespace, payload: dict) -> dict:
     # The deadline wraps the janus import too: in phase 1's stateless mode that
     # import is the slowest thing the shim does, so leaving it outside the
     # budget would leave the one path most likely to stall unguarded.
+    if args.deadline > 0 and not _has_sigalrm():
+        return _decide_within_deadline(args, payload)
     with _deadline(args.deadline):
         return _decide(args, payload)
 

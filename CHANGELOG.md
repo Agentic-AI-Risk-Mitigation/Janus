@@ -6,6 +6,32 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Path policies did not match on Windows — every secret-read deny was silently allowed
+  there.** Claude Code reports `tool_input.file_path` with the *host's* separator
+  (`C:\Users\...\.env`, verified against a live CLI 2.1.246 session), while the starter
+  policy anchored on `/`. Against the previous starter, reads of `.env`, `~/.ssh/id_rsa`,
+  `~/.aws/credentials` and `~/.claude/.credentials.json` were all **allowed** on Windows, as
+  were writes to `.claude/settings.json` — the rule meant to stop an agent disarming the
+  guard. Only `\.pem$` held, being the one pattern needing no separator. Path patterns now
+  use a separator class (`janus.cli.starter_policy.SEP`, `[/\\]`), user-supplied paths are
+  normalized the same way, and `examples/claude_code/policy.starter.json` is regenerated to
+  match. A Windows payload fixture captured from a live session
+  (`tests/fixtures/claude_code_payloads/pretooluse.windows-read.json`) pins it. The bug was
+  invisible because every prior fixture, and the whole CI matrix, was Linux.
+- **`janus init` verification reported PASS against paths the CLI never sends.** Its probes
+  built paths with `as_posix()`, so on Windows they exercised forward slashes while the
+  deployment received backslashes — seven green checks on a policy that was allowing `.env`
+  reads. Probes now use the host's native separator.
+- **The `janus-hook` deadline was inert on Windows.** `_deadline` needs `SIGALRM`, so on
+  Windows it degraded to no deadline at all, and a wedged decision ran until the CLI's own
+  hook timeout — which fails **open**. A worker-thread fallback restores the property: the
+  shim reaches its own limit and emits a deny while it still can. This also fixes the one
+  test that had been failing on Windows.
+- CI now runs the suite on `windows-latest` as well as `ubuntu-latest`. All three bugs above
+  were platform-specific and a Linux-only matrix could not see any of them.
+
 ### Changed
 
 - **BREAKING — `openai` and `jinja2` moved out of core dependencies** into the new `generate`

@@ -6,7 +6,7 @@
       "conditions": {
         "file_path": {
           "type": "string",
-          "pattern": "(^|/)\\.env(?!\\.example)[^/]*$|/\\.ssh/|/\\.aws/credentials|\\.pem$|/\\.claude/\\.credentials\\.json$"
+          "pattern": "(^|[/\\\\])\\.env(?!\\.example)[^/\\\\]*$|[/\\\\]\\.ssh[/\\\\]|[/\\\\]\\.aws[/\\\\]credentials|\\.pem$|[/\\\\]\\.claude[/\\\\]\\.credentials\\.json$"
         }
       },
       "fallback": 0
@@ -25,7 +25,7 @@
       "conditions": {
         "command": {
           "type": "string",
-          "pattern": "(curl|wget)[^|;&]*\\|\\s*(ba|z|fi)?sh\\b|/\\.ssh/id_|/\\.aws/credentials|/\\.claude/\\.credentials"
+          "pattern": "(curl|wget)[^|;&]*\\|\\s*(ba|z|fi)?sh\\b|[/\\\\]\\.ssh[/\\\\]id_|[/\\\\]\\.aws[/\\\\]credentials|[/\\\\]\\.claude[/\\\\]\\.credentials"
         }
       },
       "fallback": 0
@@ -44,7 +44,7 @@
       "conditions": {
         "file_path": {
           "type": "string",
-          "pattern": "/\\.claude/settings(\\.local)?\\.json$|/\\.claude/janus/"
+          "pattern": "[/\\\\]\\.claude[/\\\\]settings(\\.local)?\\.json$|[/\\\\]\\.claude[/\\\\]janus[/\\\\]"
         }
       },
       "fallback": 0
@@ -63,7 +63,7 @@
       "conditions": {
         "file_path": {
           "type": "string",
-          "pattern": "/\\.claude/settings(\\.local)?\\.json$|/\\.claude/janus/"
+          "pattern": "[/\\\\]\\.claude[/\\\\]settings(\\.local)?\\.json$|[/\\\\]\\.claude[/\\\\]janus[/\\\\]"
         }
       },
       "fallback": 0
@@ -82,7 +82,7 @@
       "conditions": {
         "file_path": {
           "type": "string",
-          "pattern": "/\\.claude/settings(\\.local)?\\.json$|/\\.claude/janus/"
+          "pattern": "[/\\\\]\\.claude[/\\\\]settings(\\.local)?\\.json$|[/\\\\]\\.claude[/\\\\]janus[/\\\\]"
         }
       },
       "fallback": 0
