@@ -42,7 +42,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from demos.demo_2.tools import GITHUB_TOOLS, load_fixture
+from demos.demo_2.github_api import load_fixture
+from demos.demo_2.tools import GITHUB_TOOLS
 from janus import PolicyEnforcer
 from janus.exceptions import PolicyViolation
 
