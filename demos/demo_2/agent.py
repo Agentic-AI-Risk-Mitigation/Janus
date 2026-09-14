@@ -26,23 +26,26 @@ Usage::
     # Narrow the policy to just that issue
     python -m demos.demo_2.agent --repo python/cpython --issue 100000 --pin-repo
 
-    # Injection scenario, both sides, no network or API key needed for --check
+    # Injection scenario, both sides
     python -m demos.demo_2.agent --poisoned --mode both
+
+    # Policy only - no LLM, no network, no API key
     python -m demos.demo_2.agent --check
 
-Requires ``OPENAI_API_KEY`` (or ``--model`` pointing at another provider) for
-every mode except ``--check``, which exercises the enforcer directly.
+Models go through LiteLLM (see ``model.py``), so ``--model`` takes any LiteLLM
+model string and needs that provider's API key. Every mode except ``--check``
+calls a model; ``--check`` exercises the enforcer directly.
 """
 
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 from typing import Any
 
 from demos.demo_2.github_api import load_fixture
+from demos.demo_2.model import credential_hint, init_model
 from demos.demo_2.tools import GITHUB_TOOLS
 from janus import PolicyEnforcer
 from janus.exceptions import PolicyViolation
@@ -54,6 +57,10 @@ POISONED_FIXTURE = HERE / "fixtures" / "poisoned_issue.json"
 
 DEFAULT_REPO = "Agentic-AI-Risk-Mitigation/Janus"
 DEFAULT_ISSUE = 4
+DEFAULT_MODEL = "openai/gpt-4o"
+
+# The repo/issue the poisoned fixture describes.
+POISONED_TARGET = ("acme-corp", "widget-sdk", 42)
 
 # Arguments the enforcer rejects when absent or blank, before any rule runs.
 # Without this, omitting `owner` would sidestep the owner pattern entirely.
@@ -120,7 +127,14 @@ class IssueExplainer:
     ``AgentExecutor`` unconditionally and so cannot load under LangChain 1.x.
     """
 
-    def __init__(self, *, policy: PolicyEnforcer | None, model: str, verbose: bool):
+    def __init__(
+        self,
+        *,
+        policy: PolicyEnforcer | None,
+        model: str,
+        verbose: bool,
+        api_base: str | None = None,
+    ):
         from janus.adapters.langchain import secure_langchain_tools
 
         self.lc_tools = secure_langchain_tools(GITHUB_TOOLS, policy)
@@ -128,7 +142,7 @@ class IssueExplainer:
         self.tool_calls: list[str] = []
 
         system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
-        llm = _init_chat_model(model)
+        llm = _init_chat_model(model, api_base=api_base)
 
         if _has_create_agent():
             from langchain.agents import create_agent
@@ -204,19 +218,9 @@ def _has_create_agent() -> bool:
     return True
 
 
-def _init_chat_model(model: str) -> Any:
-    """
-    Build a chat model from a ``"<provider>/<name>"`` string.
-
-    Uses LangChain's own ``init_chat_model``, which takes ``provider:name``, so
-    only the separator needs translating.
-    """
-    from langchain.chat_models import init_chat_model
-
-    if "/" not in model:
-        raise ValueError(f"--model must be '<provider>/<name>', got '{model}'")
-    provider, name = model.split("/", 1)
-    return init_chat_model(f"{provider}:{name}", temperature=0)
+def _init_chat_model(model: str, api_base: str | None = None) -> Any:
+    """Build the chat model. Indirection kept so tests can substitute a fake."""
+    return init_model(model, api_base=api_base)
 
 
 def build_agent(
@@ -224,6 +228,7 @@ def build_agent(
     policy: PolicyEnforcer | None,
     model: str,
     verbose: bool,
+    api_base: str | None = None,
 ) -> IssueExplainer:
     """
     Build the agent, with or without Janus enforcement.
@@ -231,7 +236,7 @@ def build_agent(
     ``policy=None`` produces the unprotected comparison agent: the same model
     and the same tools, with no enforcement layer in front of them.
     """
-    return IssueExplainer(policy=policy, model=model, verbose=verbose)
+    return IssueExplainer(policy=policy, model=model, verbose=verbose, api_base=api_base)
 
 
 def explain_issue(agent: IssueExplainer, owner: str, repo: str, issue_number: int) -> str:
@@ -379,8 +384,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--model",
-        default="openai/gpt-4o",
-        help="Model as '<provider>/<name>' (default: openai/gpt-4o).",
+        default=DEFAULT_MODEL,
+        help=f"LiteLLM model string, e.g. anthropic/claude-sonnet-4-5 (default: {DEFAULT_MODEL}).",
+    )
+    parser.add_argument(
+        "--api-base",
+        default=None,
+        help="Override the provider endpoint — a LiteLLM proxy or a local Ollama server.",
     )
     parser.add_argument("--verbose", action="store_true", help="Show LangChain's trace.")
     args = parser.parse_args(argv)
@@ -394,13 +404,10 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(str(exc))
     issue_number = args.issue
 
-    provider = args.model.split("/", 1)[0]
-    if provider == "openai" and not os.environ.get("OPENAI_API_KEY"):
-        print(
-            "OPENAI_API_KEY is not set. Set it, or pass --model for another "
-            "provider, or run --check to verify the policy without an LLM.",
-            file=sys.stderr,
-        )
+    hint = credential_hint(args.model, args.api_base)
+    if hint:
+        print(hint, file=sys.stderr)
+        print("  Or run --check to verify the policy without an LLM.", file=sys.stderr)
         return 1
 
     if args.poisoned:
@@ -408,19 +415,23 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Missing fixture: {POISONED_FIXTURE}", file=sys.stderr)
             return 1
         load_fixture(POISONED_FIXTURE)
-        owner, repo, issue_number = "acme-corp", "widget-sdk", 42
+        owner, repo, issue_number = POISONED_TARGET
         print(f"Reading from fixture {POISONED_FIXTURE.name} -> {owner}/{repo}#{issue_number}")
 
     if args.mode in ("unprotected", "both"):
         _banner("UNPROTECTED — no Janus enforcement")
-        agent = build_agent(policy=None, model=args.model, verbose=args.verbose)
+        agent = build_agent(
+            policy=None, model=args.model, verbose=args.verbose, api_base=args.api_base
+        )
         print(explain_issue(agent, owner, repo, issue_number))
 
     if args.mode in ("protected", "both"):
         scope = "pinned to this issue" if args.pin_repo else POLICY_PATH.name
         _banner(f"PROTECTED — Janus enforcing ({scope})")
         enforcer = load_policy(owner, repo, issue_number, pin_repo=args.pin_repo)
-        agent = build_agent(policy=enforcer, model=args.model, verbose=args.verbose)
+        agent = build_agent(
+            policy=enforcer, model=args.model, verbose=args.verbose, api_base=args.api_base
+        )
         print(explain_issue(agent, owner, repo, issue_number))
 
     return 0

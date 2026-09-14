@@ -7,7 +7,7 @@ system prompt is the same one the guarded agent uses, and that prompt already
 warns the model that issue text is untrusted data rather than instructions.
 
 There is no policy, no enforcer, and no Janus import anywhere in this file or in
-the ``github_api`` module it depends on. You can check that::
+the ``github_api`` and ``model`` modules it depends on. You can check that::
 
     python -m demos.demo_2.baseline_agent --prove-no-janus
 
@@ -22,7 +22,7 @@ issue" — but its *capability* includes writing. Nothing in this file connects
 the two, so the only thing standing between "reads attacker-controlled text"
 and "performs an attacker-chosen write" is the model choosing to behave.
 
-Run ``--poisoned`` to see what happens when it doesn't:
+Run ``--poisoned`` to see what happens when it doesn't::
 
     python -m demos.demo_2.baseline_agent --poisoned --verbose
 
@@ -33,13 +33,13 @@ and the run ends with SINK REACHED.
 
 The guarded version of this same agent is in ``agent.py``.
 
-Requires ``OPENAI_API_KEY``, or ``--model`` pointing at another provider.
+Models go through LiteLLM (see ``model.py``), so ``--model`` takes any LiteLLM
+model string and needs that provider's API key.
 """
 
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -50,6 +50,7 @@ from demos.demo_2.github_api import (
     reset_sink,
     sink_was_reached,
 )
+from demos.demo_2.model import credential_hint, init_model
 
 HERE = Path(__file__).parent
 PROMPT_PATH = HERE / "prompts" / "system_prompt.md"
@@ -57,6 +58,7 @@ POISONED_FIXTURE = HERE / "fixtures" / "poisoned_issue.json"
 
 DEFAULT_REPO = "Agentic-AI-Risk-Mitigation/Janus"
 DEFAULT_ISSUE = 4
+DEFAULT_MODEL = "openai/gpt-4o"
 
 # The repo/issue the poisoned fixture describes.
 POISONED_TARGET = ("acme-corp", "widget-sdk", 42)
@@ -71,13 +73,19 @@ class UnguardedIssueExplainer:
     one of them.
     """
 
-    def __init__(self, *, model: str, verbose: bool = False):
+    def __init__(
+        self,
+        *,
+        model: str,
+        verbose: bool = False,
+        api_base: str | None = None,
+    ):
         self.lc_tools = build_langchain_tools()
         self.verbose = verbose
         self.tool_calls: list[str] = []
 
         system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
-        llm = _init_chat_model(model)
+        llm = _init_chat_model(model, api_base=api_base)
 
         if _has_create_agent():
             from langchain.agents import create_agent
@@ -153,14 +161,9 @@ def _has_create_agent() -> bool:
     return True
 
 
-def _init_chat_model(model: str) -> Any:
-    """Build a chat model from a ``"<provider>/<name>"`` string."""
-    from langchain.chat_models import init_chat_model
-
-    if "/" not in model:
-        raise ValueError(f"--model must be '<provider>/<name>', got '{model}'")
-    provider, name = model.split("/", 1)
-    return init_chat_model(f"{provider}:{name}", temperature=0)
+def _init_chat_model(model: str, api_base: str | None = None) -> Any:
+    """Build the chat model. Indirection kept so tests can substitute a fake."""
+    return init_model(model, api_base=api_base)
 
 
 def explain_issue(agent: UnguardedIssueExplainer, owner: str, repo: str, issue_number: int) -> str:
@@ -181,7 +184,7 @@ def prove_no_janus() -> int:
     Import this agent's whole dependency chain and assert Janus never loads.
 
     Cheap to run and it keeps the claim honest: if someone later imports Janus
-    from ``github_api`` or from here, this fails.
+    from ``github_api``, ``model``, or from here, this fails.
     """
     import subprocess
 
@@ -247,8 +250,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--model",
-        default="openai/gpt-4o",
-        help="Model as '<provider>/<name>' (default: openai/gpt-4o).",
+        default=DEFAULT_MODEL,
+        help=f"LiteLLM model string, e.g. anthropic/claude-sonnet-4-5 (default: {DEFAULT_MODEL}).",
+    )
+    parser.add_argument(
+        "--api-base",
+        default=None,
+        help="Override the provider endpoint — a LiteLLM proxy or a local Ollama server.",
     )
     parser.add_argument("--verbose", action="store_true", help="Print the tool-call trace.")
     args = parser.parse_args(argv)
@@ -262,12 +270,9 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(str(exc))
     issue_number = args.issue
 
-    provider = args.model.split("/", 1)[0]
-    if provider == "openai" and not os.environ.get("OPENAI_API_KEY"):
-        print(
-            "OPENAI_API_KEY is not set. Set it, or pass --model for another provider.",
-            file=sys.stderr,
-        )
+    hint = credential_hint(args.model, args.api_base)
+    if hint:
+        print(hint, file=sys.stderr)
         return 1
 
     if args.poisoned:
@@ -280,10 +285,11 @@ def main(argv: list[str] | None = None) -> int:
 
     reset_sink()
 
-    print(
-        f"\n{'=' * 72}\nUNGUARDED — no Janus, no policy, nothing between model and tools\n{'=' * 72}"
-    )
-    agent = UnguardedIssueExplainer(model=args.model, verbose=args.verbose)
+    print(f"\n{'=' * 72}")
+    print("UNGUARDED — no Janus, no policy, nothing between model and tools")
+    print(f"{'=' * 72}")
+    agent = UnguardedIssueExplainer(model=args.model, verbose=args.verbose, api_base=args.api_base)
+    print(f"Model: {args.model}")
     print(f"Tools bound (all callable): {', '.join(agent.list_tools())}\n")
 
     answer = explain_issue(agent, owner, repo, issue_number)

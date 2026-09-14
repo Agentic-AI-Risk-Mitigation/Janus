@@ -122,7 +122,7 @@ PASS  fetch_github_issue     path traversal in repo name -> fails the pattern
 ### Flags
 
 `baseline_agent.py`: `--repo`, `--issue`, `--poisoned`, `--prove-no-janus`,
-`--model`, `--verbose`.
+`--model`, `--api-base`, `--verbose`.
 
 `agent.py`: the same, plus:
 
@@ -238,10 +238,57 @@ published. If that file exists after a *guarded* run, enforcement failed.
 
 ---
 
+## Models (LiteLLM)
+
+Both agents get their model from `model.py`, which goes through
+[LiteLLM](https://docs.litellm.ai/). One provider decision covers the guarded
+and the unguarded path — running both sides on the same model is what makes the
+comparison mean anything.
+
+`--model` takes a LiteLLM model string, `provider/model`:
+
+```bash
+--model openai/gpt-4o
+--model anthropic/claude-sonnet-4-5
+--model gemini/gemini-2.0-flash
+--model groq/llama-3.3-70b-versatile
+--model ollama/llama3.1            # local, no API key
+```
+
+Credentials come from each provider's usual environment variable
+(`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GROQ_API_KEY`, …). Both agents check
+for the expected one up front and print what is missing, rather than failing
+with a provider traceback part-way through a run.
+
+`model.py` imports no Janus, so the baseline agent can depend on it and
+`--prove-no-janus` keeps passing.
+
+### Keyless options
+
+`--api-base` redirects requests, which covers the two setups that need no
+provider key:
+
+```bash
+# A LiteLLM proxy
+--model openai/gpt-4o --api-base http://localhost:4000
+
+# A local model via Ollama
+--model ollama/llama3.1 --api-base http://localhost:11434
+```
+
+### Reading a private repository
+
+`GITHUB_TOKEN` is read by the tools, not by the model. With `gh` installed:
+
+```bash
+export GITHUB_TOKEN=$(gh auth token)
+```
+
 ## Notes
 
 - HTTP uses the standard library, so the demo adds no dependency beyond
-  LangChain. `pip install -e ".[langchain]"`.
+  LangChain and LiteLLM:
+  `pip install -e ".[langchain]" && pip install langchain-litellm`.
 - Works on LangChain 0.3 (`AgentExecutor`) and 1.x (`create_agent`); the
   generation is detected at construction.
 - `GITHUB_TOKEN` is optional — it raises the anonymous 60 requests/hour limit
