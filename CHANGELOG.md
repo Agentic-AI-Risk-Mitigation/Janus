@@ -8,6 +8,25 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Subagents were broken under `mode="policy"`, and subagent output silently stopped
+  tainting.** Two defects, found by re-running the payload-shape capture against CLI
+  2.1.278 (the fixtures were pinned at 2.1.233). First: `SubagentHandback` — the tool a
+  subagent uses to deliver its report to its caller — is a CLI-internal transport tool
+  that strict default-deny blocked, stranding every subagent's work. It is now in
+  `DEFAULT_CLI_PASSTHROUGH_TOOLS` alongside `ToolSearch`. Second, and worse: **the taint
+  source for subagent output moved.** On 2.1.233 the subagent's report came back in the
+  parent's `PostToolUse[Agent].tool_response.content`; on 2.1.278 that field is a
+  placeholder pointing at the `SubagentHandback` call (new `handback: "send"` key), and
+  the content travels in that call's `tool_input.message` — its *input*, while its
+  response is only a delivery receipt. A `TaintTracker` sourcing `Agent` therefore
+  recorded a fixed placeholder sentence and lost the subagent's content entirely, with
+  no error and no failing test, leaving every downstream sink open. The new
+  `CLI_INPUT_SOURCE_TOOLS` mapping makes the recording seam read the input for such
+  tools, gated on `PostToolUse` so a pre-decision or failed handback records nothing.
+  **Deployments that want subagent output to taint must now list `SubagentHandback` as a
+  source — naming `Agent` alone no longer reaches that content.** Three fixtures captured
+  from the live 2.1.278 session pin all of it.
+
 - **Path policies did not match on Windows — every secret-read deny was silently allowed
   there.** Claude Code reports `tool_input.file_path` with the *host's* separator
   (`C:\Users\...\.env`, verified against a live CLI 2.1.246 session), while the starter

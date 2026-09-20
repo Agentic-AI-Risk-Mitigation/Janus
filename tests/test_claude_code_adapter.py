@@ -20,6 +20,8 @@ from janus.adapters.claude_code import (
     ABSTAIN,
     ALLOW,
     ASK,
+    CLI_INPUT_SOURCE_TOOLS,
+    DEFAULT_CLI_PASSTHROUGH_TOOLS,
     DENY,
     UNKNOWN_MCP_SERVER,
     claude_code_resolve_name,
@@ -33,7 +35,7 @@ from janus.adapters.claude_code import (
     record_cli_event,
     unwrap_cli_response,
 )
-from janus.policy.decision import LAYER_RULES, LAYER_TAINT
+from janus.policy.decision import LAYER_PASSTHROUGH, LAYER_RULES, LAYER_TAINT
 from janus.policy.session import Session
 from janus.policy.taint import TaintTracker
 
@@ -292,6 +294,22 @@ class TestPolicyMode:
         decision = evaluate(load("pretooluse.builtin-read"), policy, mode="policy")
         assert decision.decision == DENY and decision.layer == LAYER_RULES
 
+    def test_subagent_handback_is_not_default_denied(self, policy):
+        """Regression: strict default-deny used to block the tool a subagent
+        uses to report back, breaking every subagent workflow under
+        ``mode="policy"``. It reaches no resource — denying it only strands the
+        subagent's work."""
+        decision = evaluate(load("pretooluse.subagent-handback"), policy, mode="policy")
+        assert decision.decision == ALLOW
+        assert decision.layer == LAYER_PASSTHROUGH
+
+    def test_passthrough_is_not_a_blanket_exemption(self, policy):
+        """SubagentHandback passes the decision seam but is still a taint
+        source at the recording seam — the two must not be conflated."""
+        assert "SubagentHandback" in DEFAULT_CLI_PASSTHROUGH_TOOLS
+        assert "SubagentHandback" in CLI_INPUT_SOURCE_TOOLS
+        assert "ToolSearch" not in CLI_INPUT_SOURCE_TOOLS
+
     def test_deny_json_byte_shape(self, policy):
         output = decide_cli_event(
             normalize_cli_event(load("pretooluse.builtin-read")),
@@ -474,6 +492,62 @@ class TestRecordOutput:
         payload.pop("tool_response")
         assert record_cli_event(normalize_cli_event(payload), session) is None
         assert not session.is_tainted()
+
+    def test_subagent_handback_records_its_input_not_its_receipt(self):
+        """The subagent's report is in tool_input.message; the response is a receipt."""
+        seen = {}
+
+        def classify(tool, output):
+            seen[tool] = output
+            return None
+
+        session = Session(taint=TaintTracker(classify=classify))
+        record_cli_event(normalize_cli_event(load("posttooluse.subagent-handback")), session)
+        assert "hello-from-subagent" in seen["SubagentHandback"]
+        assert "Report delivered to your caller." not in seen["SubagentHandback"]
+
+    def test_subagent_handback_taints_when_listed_as_a_source(self):
+        session = Session(taint=TaintTracker(sources={"SubagentHandback": "subagent"}))
+        recorded = record_cli_event(
+            normalize_cli_event(load("posttooluse.subagent-handback")), session
+        )
+        assert recorded["taint"] == ["subagent"]
+        assert session.is_tainted()
+
+    def test_pretooluse_handback_records_nothing(self):
+        """The input is already populated pre-execution; recording there would
+        taint the session for a call that may still be denied."""
+        session = Session(taint=TaintTracker(sources={"SubagentHandback": "subagent"}))
+        assert record_cli_event(
+            normalize_cli_event(load("pretooluse.subagent-handback")), session
+        ) is None
+        assert not session.is_tainted()
+
+    def test_missing_source_argument_warns_rather_than_silently_skipping(self, caplog):
+        """Drift in the *input* shape must be loud. A quiet skip here would
+        reproduce the exact bug this branch exists to fix."""
+        session = Session(taint=TaintTracker(sources={"SubagentHandback": "subagent"}))
+        payload = load("posttooluse.subagent-handback")
+        payload["tool_input"].pop("message")
+        with caplog.at_level("WARNING"):
+            assert record_cli_event(normalize_cli_event(payload), session) is None
+        assert not session.is_tainted()
+        assert "re-run the fixture capture" in caplog.text
+
+    def test_agent_result_no_longer_carries_the_subagent_report(self):
+        """Regression pin for the 2.1.278 change that moved the taint source.
+
+        On 2.1.233 the subagent's words were in the parent's Agent result. On
+        2.1.278 that field is a placeholder pointing at SubagentHandback, so a
+        tracker sourcing only ``Agent`` records the placeholder and silently
+        loses the content.
+        """
+        old = load("posttooluse.agent-result")["tool_response"]["content"][0]["text"]
+        new = load("posttooluse.agent-result.handback")["tool_response"]
+        assert "from-subagent" in old
+        assert new["handback"] == "send"
+        assert "not repeated here" in new["content"][0]["text"]
+        assert "hello-from-subagent" not in json.dumps(new["content"])
 
     def test_end_to_end_read_then_gated_bash(self, policy):
         """The scenario the whole taint mechanism exists for."""

@@ -637,6 +637,7 @@ the CLI-side contract on a pinned CLI version, results logged in this doc's tabl
 |---|---|---|
 | 2026-08-15 | 2.1.233 | **Hook timeout fails open** (smoke 5): `timeout: 3` + 10 s sleep ⇒ the deny was discarded and the tool ran; prompt deny blocked. **`PostToolUseFailure` replaces `PostToolUse`** for a failed call, with `error` and no `tool_response` — fixture captured. |
 | 2026-08-15 | 2.1.233 | **Decision vocabulary probed** (§6 table): `deny` and `ask` block in both `claude -p` and `--dangerously-skip-permissions`; `escalate` runs the tool, identically to a bogus string. Hooks are honored under `bypassPermissions`. `pretooluse.bypass-permissions.json` captured. Smoke items 2 and 4 covered by hand; not yet automated. |
+| 2026-09-20 | 2.1.278 | **Smoke 1 (payload-shape tripwire) re-run on a newer CLI.** 44 payloads, same capture method as 2026-08-15. **No drift** on the core enforcement path (`Pre`/`PostToolUse` for `Read`/`Bash`, top-level and subagent; `PostToolUseFailure`; `PreToolUse[Agent]`; `SessionStart`/`SessionEnd`; `SubagentStart`/`SubagentStop`; `UserPromptSubmit`); `tool_response` is still `tool_response`. Drift found: (a) **`SubagentHandback`** is a new CLI-internal tool that `mode="policy"` **denies** (open item 7, answered — see follow-ups below); (b) `claude -p` now reports `permission_mode: "auto"`, not `"default"`, while `--dangerously-skip-permissions` still reports `bypassPermissions`, so the unsupervised promotion is **unaffected**; (c) MCP `tool_response` switched from a raw JSON string to a content-block list (absorbed by `unwrap_cli_response`; fixture README corrected); (d) new `mcp_server` envelope key; (e) `PostToolUse[Agent]` gained `handback`/`harness*` keys, `ToolSearch` now fires as its own Pre/PostToolUse, `Stop` payload newly seen. |
 
 ## 11. Phased implementation plan
 
@@ -710,6 +711,67 @@ bypassPermissions are now verified — §6); (3)
 plugin-MCP tool-name grammar and output shapes on the wire; (4) hook-timeout
 fail-open confirmation on the pinned CLI; (5) managed-settings inline-hooks loading
 (#33824 stale-closed) and force-enabled-plugin exception; (6) whether plugin.json truly
-has no permissions surface; (7) whether any CLI-internal tool *besides* `ToolSearch`
-needs passthrough in `mode="policy"`; (8) `PermissionRequest`/`PermissionDenied` payloads
+has no permissions surface; ~~(7) whether any CLI-internal tool *besides* `ToolSearch`
+needs passthrough in `mode="policy"`~~ **ANSWERED 2026-09-20 — yes, `SubagentHandback`;
+see the follow-ups below**; (8) `PermissionRequest`/`PermissionDenied` payloads
 sufficing to correlate an approval back to a specific escalated `tool_use_id`.
+
+**Follow-ups opened by the 2026-09-20 / 2.1.278 re-run.** The first item was fixed
+same-day; the rest are recorded, not fixed.
+
+- **`SubagentHandback` — two bugs, not one. [FIXED 2026-09-20]** The visible one:
+  under `mode="policy"` strict default-deny, the tool a subagent uses to deliver its
+  report to its caller was denied, breaking every subagent workflow. That one fails
+  closed — a correctness/availability defect, not a security hole.
+
+  Chasing it surfaced the one that matters. **The taint source for subagent output
+  moved between 2.1.233 and 2.1.278.** On 2.1.233 the subagent's words came back in
+  the parent's `PostToolUse[Agent].tool_response.content` — `posttooluse.agent-result.json`
+  has them there verbatim, and §4's "the `Agent` result is its own re-entry point for
+  subagent output" was written off that. On 2.1.278 the same field is a placeholder:
+
+  > "This agent's report was delivered to you as a message from "&lt;agent_id&gt;"
+  > (its SubagentHandback call). Read it there; it is not repeated here."
+
+  with a new `handback: "send"` key marking the mode
+  (`posttooluse.agent-result.handback.json`). A tracker sourcing `Agent` now records
+  *that sentence* and loses the subagent's content entirely — no error, no missing key,
+  just a source that silently stops producing labels while every downstream sink stays
+  open. Same shape as the `as_posix()` probes and the Windows path bug: the mechanism
+  reports success while measuring nothing.
+
+  So `SubagentHandback` is a passthrough at the **decision** seam and a source at the
+  **recording** seam, and the content is in `tool_input.message`, not `tool_response`
+  (its response is a delivery receipt). Both are now wired:
+  `DEFAULT_CLI_PASSTHROUGH_TOOLS` gains it, and `CLI_INPUT_SOURCE_TOOLS` maps it to the
+  argument the recorder reads, gated on `PostToolUse` so a pre-decision or failed
+  handback records nothing. Deployments wanting subagent output to taint must now list
+  `SubagentHandback` as a source; **naming `Agent` alone no longer reaches that content.**
+
+  Two things this does *not* settle. The `handback` key implies other modes than
+  `"send"` — if some sessions still inline the report in the `Agent` result, both paths
+  are live and the recorder should handle each without double-counting. And the SDK
+  adapter has the same exposure in principle, mitigated only by `Agent`/`Task` being in
+  `DEFAULT_DISALLOWED_TOOLS`: any deployment enabling subagents through
+  `unsafe_overrides=True` inherits the silent loss, and `janus_hooks` has no equivalent
+  of `CLI_INPUT_SOURCE_TOOLS` today.
+- **`mcp_server` envelope key `[follow-up]`.** MCP events now carry
+  `{"name": ..., "source": "dynamic"}`, i.e. the CLI states server identity
+  authoritatively instead of leaving it to be parsed out of the `mcp__server__tool`
+  grammar. Worth evaluating as a stronger input to `claude_code_resolve_name` and its
+  unknown-server sentinel than the name string — and it may be the cheapest route into
+  open item 3 (plugin-MCP grammar), if `source` distinguishes plugin-provided servers.
+  Unknown: whether the key is present on *every* MCP event or only some, and what the
+  full `source` vocabulary is.
+- **New/changed output shapes `[follow-up]`.** `PostToolUse[Agent].tool_response` gained
+  `handback`, `harnessNoteCount`, `harnessSectionHash`, `harnessTailCount`; `ToolSearch`
+  now fires as its own `Pre`/`PostToolUse` (previously seen only inside a
+  `PostToolBatch`) and returns a dict (`matches`/`query`/`total_deferred_tools`) rather
+  than a block list; the `Stop` payload is newly captured (`background_tasks`,
+  `session_crons`, `stop_hook_active`, `last_assistant_message`). None break the current
+  normalizer, but each is a shape a taint extractor would have to know about.
+- **Automation note for `test_live_cli_semantics.py`.** The first 2.1.278 run captured
+  no `Read` at all — the model chose `cat sample.txt` — and a naive key-set diff would
+  have reported "no drift on `Read`" while never exercising it. The smoke test must
+  **assert the expected tool set actually appeared** before diffing, or it reproduces
+  the same unfalsifiable-green failure as the `as_posix()` probes.
