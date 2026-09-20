@@ -8,6 +8,40 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`janus init` could write a deployment that enforced nothing, and report seven PASS
+  lines over it.** Claude Code runs hooks through its own shell, with the `PATH` of the
+  session the operator starts later. `janus init` is normally run as `uv run janus init`,
+  which puts the project venv's `bin` on `PATH`, so `shutil.which("janus-hook")` succeeded
+  and the wizard wrote a bare `janus-hook` command. A `claude` session started from an
+  ordinary shell could not find it: the hook exited 127, and Claude Code treats a
+  non-zero-but-not-2 hook exit as a **non-blocking** error, so the tool ran and nothing was
+  enforced — confirmed live, a `Read` of `.env` that the policy denies succeeded with no
+  error shown. Now: the private scopes (`user`, `project-local`) get the resolved absolute
+  path, since those settings files are machine-specific anyway; the shared `project` scope
+  keeps the portable bare name — an absolute venv path would be wrong for teammates — and
+  verification warns loudly when it will not resolve in a plain shell. A `_hook_is_reachable`
+  warning for exactly this failure already existed and never fired, because it inspected the
+  wizard's `PATH` rather than the one that matters.
+- **`janus init` verified the policy instead of the deployment.** The closing checks called
+  `handle_cli_payload` in process, which answers "would this policy deny this payload" —
+  never "does the command just written to settings.json deny it". That is why the bug above
+  was invisible. `verify()` now executes the exact command string with `CLAUDE_PROJECT_DIR`
+  set as the CLI sets it, feeding payloads on stdin, and fails on a non-zero exit,
+  unparseable stdout (which also makes the shim's stdout-isolation property a standing
+  check), or a wrong decision. One additional probe re-runs with this interpreter's venv
+  stripped from `PATH`, standing in for the shell a real session gets.
+- **`Bash` could read the secrets `Read` was denied.** `.env` and `*.pem` were in
+  `SECRET_READ_PATTERN` but missing from `BASH_EXFIL_PATTERN`, so `Read` on `.env` was
+  denied while `cat .env` was allowed — the same secret, one tool apart. Found by a live
+  agent, which reached for `Bash` the moment `Read` was refused and returned the contents,
+  against a policy whose own verification had just printed `reading a .env file is denied`.
+  Both are now in the `Bash` deny in command-line form (`\.pem\b`, not the end-anchored
+  `\.pem$` a file path uses), the `.env.example` exemption is preserved, and probes now
+  cover the `Bash` route to each secret. Probe labels name the tool they tested
+  (`.env is denied (Read)` / `(Bash)`), because the old wording read as coverage the
+  deployment did not have. `docs/claude-code-deployment.md` now states plainly what shell
+  argument-matching can and cannot promise.
+
 - **Subagents were broken under `mode="policy"`, and subagent output silently stopped
   tainting.** Two defects, found by re-running the payload-shape capture against CLI
   2.1.278 (the fixtures were pinned at 2.1.233). First: `SubagentHandback` — the tool a

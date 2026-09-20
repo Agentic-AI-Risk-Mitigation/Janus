@@ -73,6 +73,19 @@ BASH_EXFIL_PATTERN = (
     rf"|{SEP}\.ssh{SEP}id_"
     rf"|{SEP}\.aws{SEP}credentials"
     rf"|{SEP}\.claude{SEP}\.credentials"
+    # `.env` and `*.pem` are in SECRET_READ_PATTERN but were missing here, so
+    # `Read` on `.env` was denied while `cat .env` sailed through — the same
+    # secret, one tool apart. Found by a live agent, which reached for Bash the
+    # moment Read was refused.
+    #
+    # These need *command-line* forms, not the path forms above. `\.pem$` is
+    # end-anchored for a file path and would never match mid-command, which is
+    # exactly why _entry_patterns routes `*.` globs away from the Bash deny.
+    # The left-hand class keeps `NODE_ENV=1` and `--env` from matching while
+    # still catching `.env`, `./.env`, `"/srv/app/.env"` and `.env.local`; the
+    # lookahead preserves the `.env.example` exemption.
+    rf"|(^|[\s'\"=:;|&()`$]|{SEP})\.env(?!\.example)\b"
+    r"|\.pem\b"
 )
 
 #: Writes that would disable the guard itself.

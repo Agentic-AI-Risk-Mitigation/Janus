@@ -14,6 +14,7 @@ import io
 import json
 import os
 import re
+import shlex
 from pathlib import Path
 
 import pytest
@@ -126,6 +127,46 @@ class TestStarterPolicy:
             "/home/me/proj/.claude/janus/policy.json",
         ):
             assert re.search(pattern, path), f"{path} was not denied"
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "cat .env",
+            "sed -n 1p .env",
+            "cat ./.env",
+            "cat /srv/app/.env",
+            "cat .env.local",
+            "head -c 200 .env",
+            "grep TOKEN .env",
+            "cat key.pem",
+            "cat /etc/ssl/private/server.pem",
+        ],
+    )
+    def test_bash_cannot_read_what_read_is_denied(self, command):
+        """`.env` and `*.pem` were denied on Read and wide open on Bash — the
+        same secret, one tool apart. A live agent refused `Read` on `.env`
+        reached for `cat` and got the contents."""
+        pattern = build_starter_policy()["Bash"][0]["conditions"]["command"]["pattern"]
+        assert re.search(pattern, command), command
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "cat .env.example",
+            "NODE_ENV=production npm run build",
+            "mytool --env prod",
+            "echo environment",
+            'git commit -m "update env docs"',
+            "cat README.md",
+            "ls -la src",
+            "npm run dev",
+        ],
+    )
+    def test_the_widened_pattern_does_not_swallow_ordinary_commands(self, command):
+        """A deny rule that blocks `npm run build` is uninstalled within the
+        hour, which protects nothing."""
+        pattern = build_starter_policy()["Bash"][0]["conditions"]["command"]["pattern"]
+        assert not re.search(pattern, command), command
 
     def test_network_and_git_push_toggles_reach_the_bash_deny(self):
         default = build_starter_policy()["Bash"][0]["conditions"]["command"]["pattern"]
@@ -616,13 +657,13 @@ class TestHookCommandQuoting:
     is a hook that never runs — and hook dispatch failure fails OPEN."""
 
     @staticmethod
-    def _command(tmp_path, scope, name="proj"):
+    def _command(tmp_path, scope, name="proj", hook_executable="janus-hook"):
         from janus.cli import init as init_module
 
         proj = tmp_path / name
         proj.mkdir(parents=True, exist_ok=True)
         env = init_module.WizardEnv(
-            project_dir=proj, home=tmp_path / "home", hook_executable="janus-hook"
+            project_dir=proj, home=tmp_path / "home", hook_executable=hook_executable
         )
         answers = init_module.WizardAnswers(scope=scope)
         paths = init_module.paths_for_scope(scope, proj, env.home)
@@ -656,6 +697,30 @@ class TestHookCommandQuoting:
         assert init_module._quote("C:/a b/c") == '"C:/a b/c"'
         with pytest.raises(Aborted):
             init_module._quote('C:/a"b/c')
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX quoting")
+    @pytest.mark.parametrize("scope", ["user", "project-local"])
+    def test_private_scopes_get_an_absolute_path_not_a_bare_name(self, tmp_path, scope):
+        """A bare `janus-hook` is resolved against the PATH of the session the
+        operator starts later, not this wizard's. When it does not resolve the
+        shell exits 127, which Claude Code treats as non-blocking — the guard
+        fails open in silence. A private settings file is machine-specific
+        anyway, so it carries the resolved path."""
+        command = self._command(tmp_path, scope, hook_executable="/opt/venv/bin/janus-hook")
+        assert shlex.split(command)[0] == "/opt/venv/bin/janus-hook"
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX quoting")
+    def test_shared_project_scope_keeps_the_portable_bare_name(self, tmp_path):
+        """`.claude/settings.json` is committed. An absolute path into this
+        machine's venv would be wrong for every teammate, so the bare name
+        stays and `verify` warns when it will not resolve."""
+        command = self._command(tmp_path, "project", hook_executable="/opt/venv/bin/janus-hook")
+        assert shlex.split(command)[0] == "janus-hook"
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX quoting")
+    def test_module_form_is_still_used_when_the_script_is_missing(self, tmp_path):
+        command = self._command(tmp_path, "user", hook_executable=None)
+        assert "-m janus.cli.hook" in command
 
     @pytest.mark.skipif(os.name == "nt", reason="POSIX quoting")
     def test_project_scope_keeps_the_variable_expandable(self, tmp_path):
@@ -708,6 +773,45 @@ class TestVerification:
         assert code == 1
         assert "FAIL  pipe-to-shell download is denied" in out
         assert "Some checks failed" in out
+
+
+    def test_an_unrunnable_hook_command_fails_the_probes(self, tmp_path, monkeypatch, capsys):
+        """The probes must exercise the *command that was written*, not the
+        policy it names.
+
+        This is the regression for a live fail-open: `janus init` run under
+        `uv run` wrote a bare `janus-hook`, which resolved in the wizard's PATH
+        and not in the plain shell a `claude` session uses. The shell exited
+        127, Claude Code treated that as a non-blocking error and ran the tool
+        anyway, and the wizard had already printed seven PASS lines over a
+        deployment that enforced nothing. Any check that asks the policy
+        instead of the command cannot see this.
+        """
+        from janus.cli import init as init_module
+
+        proj = project(tmp_path, monkeypatch=monkeypatch)
+        monkeypatch.setattr(
+            init_module,
+            "build_hook_command",
+            lambda paths, answers, env: "janus-hook-that-does-not-exist pre --mode gate",
+        )
+        code, out = run_init(["init", "--yes", "--project-dir", str(proj)], monkeypatch, capsys)
+        assert code == 1
+        assert "FAIL" in out
+        assert "Some checks failed" in out
+
+    def test_stdout_noise_from_the_hook_is_a_failure(self, tmp_path, monkeypatch, capsys):
+        """A hook that prints anything beside its JSON corrupts the decision
+        into an allow, so unparseable stdout must fail rather than be ignored."""
+        from janus.cli import init as init_module
+
+        proj = project(tmp_path, monkeypatch=monkeypatch)
+        monkeypatch.setattr(
+            init_module, "build_hook_command", lambda paths, answers, env: "echo not-json"
+        )
+        code, out = run_init(["init", "--yes", "--project-dir", str(proj)], monkeypatch, capsys)
+        assert code == 1
+        assert "stdout was not hook JSON" in out
 
 
 class TestLLMAssist:

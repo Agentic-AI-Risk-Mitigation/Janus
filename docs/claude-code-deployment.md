@@ -68,6 +68,25 @@ Operational notes:
   `.claude/settings.local.json` (just you), or `~/.claude/settings.json` (every project).
   On Windows the project default is the `.local` file, because the hook command must carry
   absolute paths there and a shared file would be machine-specific.
+- **Scope also decides how the hook command names `janus-hook`.** Claude Code runs hooks
+  through its own shell, using the `PATH` of the session *you start later* — not the one
+  `janus init` ran in. Those differ in the usual case: the wizard is run as
+  `uv run janus init`, which puts the project venv's `bin` on `PATH`, while an ordinary
+  `claude` session has no such entry. A command the shell cannot find exits 127, and Claude
+  Code treats a non-zero-but-not-2 hook exit as a **non-blocking** error — the tool call
+  proceeds and nothing is enforced, without an error message.
+
+  So the **private** scopes (`project-local`, `user`) get the resolved absolute path: those
+  files are machine-specific already. The **shared** `project` scope keeps the portable bare
+  `janus-hook`, because an absolute path into your venv would be wrong for every teammate —
+  and there the verification step warns loudly if the name will not resolve in a plain shell.
+  If you see that warning, either make `janus-hook` available outside the venv (pipx, a
+  system install, or your shell profile) or use `--scope project-local`.
+- **Verification runs the command, not the policy.** The closing checks execute the exact
+  command string just written to the settings file, with `CLAUDE_PROJECT_DIR` set as the CLI
+  sets it, and feed it hook payloads on stdin — then repeat every check with the venv
+  stripped from `PATH`. A check that asks the policy directly cannot see a hook command that
+  the deployed session will never successfully run.
 - **Re-running is idempotent.** A Janus hook is recognized by its command, so a second run
   updates the entry rather than appending one; duplicate entries from hand-editing collapse
   to one. Foreign hooks and their order are never touched.
@@ -116,6 +135,47 @@ holds with zero hooks running. Extend it with the true sinks of your deployment 
 MCP tools included).
 
 ## Residual risk, stated plainly
+
+### What `Bash` argument matching can and cannot promise
+
+The starter policy denies secrets on `Read` *and* on `Bash`, because an agent refused one
+reaches for the other. That was not hypothetical: in a live session, `Read` on `.env` was
+denied and the agent immediately ran `cat .env` and got the contents, against a policy whose
+own verification had just printed `reading a .env file is denied`. `.env` and `*.pem` are now
+in both patterns.
+
+**Do not read that as airtight.** Matching a shell command as a string is best-effort, and
+the ways past it are ordinary, not exotic:
+
+```bash
+cat .en''v              # string-split
+V=.env; cat "$V"        # indirection
+base64 .env             # a different reader
+cp .env /tmp/x; cat /tmp/x   # copy first, read later
+```
+
+Closing the one-liner is still worth doing — it is what an agent actually reaches for, and
+an injected instruction rarely tries twice. But the controls that hold under a *motivated*
+attempt are different in kind:
+
+- **`permissions.deny`** — enforced by the CLI itself, with no hook running. This is why it
+  is not optional.
+- **Not granting `Bash` at all**, or restricting it to an allowlist of commands. A tool the
+  session does not have cannot be talked into anything.
+- **The [Agent SDK path](adapters.md#claude-agent-sdk-claude-code)**, where `janus_options()`
+  controls which tools exist at session start.
+
+The patterns match the *command string*, so they deny any `Bash` call that names a protected
+path — including harmless ones. `ls -la .env` and `docker compose --env-file .env up` are
+both denied, though neither prints the file. That is deliberate: telling "reads it" from
+"mentions it" reliably would require parsing arbitrary shell, which is the same losing game
+as above. If a workflow needs one of these, allow it explicitly rather than widening the
+pattern.
+
+Treat the `Bash` secret patterns as a tripwire that catches the casual case, not as a
+boundary. If a secret must not be readable, the agent should not have a shell.
+
+### Hook dispatch
 
 Between a hook-dispatch regression and its detection, calls not covered by
 `permissions.deny` run unenforced. On the CLI seam this window cannot be closed — only

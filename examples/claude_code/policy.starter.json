@@ -25,7 +25,7 @@
       "conditions": {
         "command": {
           "type": "string",
-          "pattern": "(curl|wget)[^|;&]*\\|\\s*(ba|z|fi)?sh\\b|[/\\\\]\\.ssh[/\\\\]id_|[/\\\\]\\.aws[/\\\\]credentials|[/\\\\]\\.claude[/\\\\]\\.credentials"
+          "pattern": "(curl|wget)[^|;&]*\\|\\s*(ba|z|fi)?sh\\b|[/\\\\]\\.ssh[/\\\\]id_|[/\\\\]\\.aws[/\\\\]credentials|[/\\\\]\\.claude[/\\\\]\\.credentials|(^|[\\s'\\\"=:;|&()`$]|[/\\\\])\\.env(?!\\.example)\\b|\\.pem\\b"
         }
       },
       "fallback": 0

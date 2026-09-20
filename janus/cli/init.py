@@ -34,6 +34,7 @@ import json
 import os
 import shlex
 import shutil
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -58,6 +59,11 @@ from janus.policy.loader import parse_policy, save_policy
 SCOPE_PROJECT = "project"
 SCOPE_PROJECT_LOCAL = "project-local"
 SCOPE_USER = "user"
+
+#: Seconds a single verification probe may take. Generously above the shim's
+#: own ``--deadline`` (5s default) so a probe failure means the command is
+#: wrong, not merely slow.
+PROBE_TIMEOUT = 20.0
 
 NETWORK_BLOCKED = "blocked"
 NETWORK_WEB_READS = "web-reads"
@@ -388,9 +394,37 @@ def policy_path_for_command(paths: WizardPaths, answers: WizardAnswers, env: Wiz
     return _quote(paths.policy.resolve().as_posix())
 
 
+def _is_shared_scope(scope: str) -> bool:
+    """``.claude/settings.json`` is the file a team commits; the others are private."""
+    return scope == SCOPE_PROJECT
+
+
 def build_hook_command(paths: WizardPaths, answers: WizardAnswers, env: WizardEnv) -> str:
-    if env.hook_executable:
+    """Build the ``command`` string written into the settings file.
+
+    The head of that string is a portability-versus-reliability trade, and it is
+    resolved by *scope* because that is what decides who else has to run it.
+
+    A bare ``janus-hook`` is resolved by the shell Claude Code spawns, using the
+    ``PATH`` of the session the operator starts later — not the ``PATH`` this
+    wizard has. Those differ in the common case: ``janus init`` is normally run
+    as ``uv run janus init``, which puts the project venv's ``bin`` on ``PATH``,
+    while an ordinary ``claude`` session has no such entry. When the shell
+    cannot find the command it exits 127, and Claude Code treats a non-2
+    non-zero exit as a non-blocking error — so the tool call proceeds and the
+    guard enforces nothing, silently.
+
+    So for the **private** scopes (``user``, ``project-local``) the resolved
+    absolute path is written: it is machine-specific, and those files are
+    machine-specific already. For the **shared** ``project`` scope the file is
+    the one a team commits, where a path into this machine's venv would be
+    wrong for everyone else — the bare name stays, and ``verify`` warns loudly
+    when it will not resolve in a plain shell.
+    """
+    if env.hook_executable and _is_shared_scope(answers.scope):
         head = "janus-hook"
+    elif env.hook_executable:
+        head = _quote(Path(env.hook_executable).as_posix())
     else:
         # The console script is not on PATH — likely an uninstalled venv. The
         # module form pins the interpreter that actually has Janus.
@@ -485,26 +519,107 @@ class Probe:
     tool: str
     tool_input: dict[str, Any]
     expect_deny: bool
+    #: What the CLI reports for the session this probe stands in for. Live
+    #: ``claude -p`` sends ``"auto"`` (2.1.278); ``"bypassPermissions"`` is the
+    #: promotion path where gate mode becomes strict default-deny.
+    permission_mode: str = "auto"
 
 
-def _decide(policy_path: Path, answers: WizardAnswers, probe: Probe) -> str | None:
-    from janus.adapters.claude_code import cli_name_resolver, handle_cli_payload
+class ProbeError(RuntimeError):
+    """The wired command could not be run, or did not answer in hook JSON."""
 
-    payload = {
-        "hook_event_name": "PreToolUse",
-        "session_id": "janus-init",
-        "tool_name": probe.tool,
-        "tool_input": probe.tool_input,
-        "permission_mode": "default",
-    }
-    output = handle_cli_payload(
-        payload,
-        str(policy_path),
-        mode=answers.mode,
-        headless=answers.headless,
-        resolve_name=cli_name_resolver(answers.known_servers or None),
+
+def _probe_payload(probe: Probe) -> str:
+    # ``permission_mode`` is what a live ``claude -p`` reports. It was
+    # ``"default"`` on CLI 2.1.233 and is ``"auto"`` as of 2.1.278; neither is
+    # an unsupervised mode, so this does not change any expected decision —
+    # but a probe should carry what the CLI actually sends.
+    return json.dumps(
+        {
+            "hook_event_name": "PreToolUse",
+            "session_id": "janus-init",
+            "tool_name": probe.tool,
+            "tool_input": probe.tool_input,
+            "permission_mode": probe.permission_mode,
+        }
     )
-    return output.get("hookSpecificOutput", {}).get("permissionDecision")
+
+
+def _venv_free_path() -> str:
+    """``PATH`` with this interpreter's venv ``bin`` removed.
+
+    The environment a wizard runs in is not the environment ``claude`` runs in.
+    ``janus init`` is normally invoked as ``uv run janus init``, which puts the
+    project venv's ``bin`` on ``PATH``; the ``claude`` session started later
+    from an ordinary shell has no such entry. A bare ``janus-hook`` resolves in
+    the first and not the second, and a hook command the shell cannot find
+    exits 127 — which Claude Code treats as a non-blocking error and proceeds,
+    so the guard silently enforces nothing.
+
+    Probing under this stripped ``PATH`` is what turns that into a FAIL instead
+    of seven PASS lines over a disarmed deployment.
+    """
+    entries = os.environ.get("PATH", "").split(os.pathsep)
+    if sys.prefix == sys.base_prefix:  # not in a venv; nothing to strip
+        return os.pathsep.join(entries)
+    venv_bin = str(Path(sys.prefix) / ("Scripts" if os.name == "nt" else "bin"))
+    return os.pathsep.join(e for e in entries if e and Path(e) != Path(venv_bin))
+
+
+def _exec_decide(
+    command: str, probe: Probe, env: WizardEnv, *, path: str | None = None
+) -> str | None:
+    """Run the *written hook command* and return its permission decision.
+
+    Deliberately executes the command string rather than calling
+    ``handle_cli_payload`` in process. The in-process form answers "would this
+    policy deny this payload"; the deployed question is "does the command that
+    was just written to settings.json deny it", and those came apart in
+    practice — a command naming an executable the session cannot find passes
+    every in-process check ever written.
+
+    ``shell=True`` is required and not incidental: the command is shell-form
+    (``$CLAUDE_PROJECT_DIR``, embedded quotes) and is run by the CLI through a
+    shell. Expanding it here would test a different string again.
+    """
+    run_env = dict(os.environ)
+    run_env["CLAUDE_PROJECT_DIR"] = str(env.project_dir)
+    if path is not None:
+        run_env["PATH"] = path
+    try:
+        result = subprocess.run(  # noqa: S602 - the command we just wrote, run as the CLI runs it
+            command,
+            shell=True,
+            input=_probe_payload(probe),
+            capture_output=True,
+            text=True,
+            cwd=str(env.project_dir),
+            env=run_env,
+            timeout=PROBE_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired:
+        raise ProbeError(f"the hook command did not answer within {PROBE_TIMEOUT}s") from None
+    except OSError as exc:
+        raise ProbeError(f"could not run the hook command ({exc})") from None
+
+    if result.returncode != 0:
+        detail = (result.stderr or "").strip().splitlines()
+        hint = detail[-1] if detail else "no stderr"
+        raise ProbeError(f"the hook command exited {result.returncode}: {hint}")
+
+    out = result.stdout.strip()
+    if not out:
+        return None  # abstention: no opinion, the CLI's own flow decides
+    try:
+        parsed = json.loads(out)
+    except json.JSONDecodeError:
+        # Also the standing check for the stdout-isolation property: anything
+        # the hook prints alongside its JSON corrupts the decision into an
+        # allow, so unparseable stdout is a failure, not a curiosity.
+        raise ProbeError(f"stdout was not hook JSON: {out[:120]!r}") from None
+    if not isinstance(parsed, dict):
+        raise ProbeError(f"stdout was not a hook JSON object: {out[:120]!r}")
+    return parsed.get("hookSpecificOutput", {}).get("permissionDecision")
 
 
 def build_probes(answers: WizardAnswers, paths: WizardPaths, env: WizardEnv) -> list[Probe]:
@@ -526,11 +641,18 @@ def build_probes(answers: WizardAnswers, paths: WizardPaths, env: WizardEnv) -> 
             True,
         ),
         Probe(
-            "reading a .env file is denied",
+            ".env is denied (Read)",
             "Read",
             {"file_path": str(env.home / ".env")},
             True,
         ),
+        # The same secret, via the other tool that can reach it. A live agent
+        # refused `Read` on `.env` went straight to `cat .env` and got the
+        # contents, against a policy whose verification had just reported
+        # "reading a .env file is denied". Probing only the tool the rule was
+        # written for reports coverage the deployment does not have.
+        Probe(".env is denied (Bash)", "Bash", {"command": "cat .env"}, True),
+        Probe("*.pem is denied (Bash)", "Bash", {"command": "cat key.pem"}, True),
         Probe(
             "editing the guard's own settings is denied",
             "Write",
@@ -543,6 +665,9 @@ def build_probes(answers: WizardAnswers, paths: WizardPaths, env: WizardEnv) -> 
             {"file_path": str(env.project_dir / "README.md")},
             False,
         ),
+        # Ordinary Bash must survive the widened secret pattern; a deny rule
+        # that swallows `ls` is uninstalled within the hour.
+        Probe("ordinary shell commands still work", "Bash", {"command": "ls -la src"}, False),
     ]
     if not answers.allow_git_push:
         probes.append(
@@ -559,12 +684,29 @@ def build_probes(answers: WizardAnswers, paths: WizardPaths, env: WizardEnv) -> 
             candidate = env.project_dir / sample.rstrip("/\\") / "secret.txt"
         else:
             candidate = env.project_dir / sample
-        probes.append(Probe(f"{sample} is denied", "Read", {"file_path": str(candidate)}, True))
+        probes.append(
+            Probe(f"{sample} is denied (Read)", "Read", {"file_path": str(candidate)}, True)
+        )
     return probes
 
 
-def verify(console: Console, *, paths: WizardPaths, answers: WizardAnswers, env: WizardEnv) -> bool:
-    """Run the deployed decision path and report PASS/FAIL per check."""
+def verify(
+    console: Console,
+    *,
+    paths: WizardPaths,
+    answers: WizardAnswers,
+    env: WizardEnv,
+    command: str,
+) -> bool:
+    """Run the *written hook command* and report PASS/FAIL per check.
+
+    Every probe is executed twice: once with the environment the wizard itself
+    has, and once with this interpreter's venv stripped from ``PATH``. The
+    second run stands in for the shell a ``claude`` session started later will
+    have. A command that answers in the first and not the second is a guard
+    that is installed and disarmed at the same time — the failure that
+    motivated running the command at all instead of asking the policy.
+    """
     from janus.cli.hook import run_doctor
 
     console.heading("Verifying")
@@ -578,24 +720,48 @@ def verify(console: Console, *, paths: WizardPaths, answers: WizardAnswers, env:
 
     for probe in build_probes(answers, paths, env):
         try:
-            decision = _decide(paths.policy, answers, probe)
-        except Exception as exc:  # a probe that cannot run is a failed probe
-            console.say(f"FAIL  {probe.label} ({type(exc).__name__}: {exc})")
+            decision = _exec_decide(command, probe, env)
+        except ProbeError as exc:
+            console.say(f"FAIL  {probe.label} ({exc})")
             ok = False
             continue
-        denied = decision == "deny"
-        if denied == probe.expect_deny:
-            console.say(f"PASS  {probe.label}")
-        else:
-            got = decision or "allow"
-            console.say(f"FAIL  {probe.label} (got {got})")
+        if (decision == "deny") != probe.expect_deny:
+            console.say(f"FAIL  {probe.label} (got {decision or 'allow'})")
             ok = False
+            continue
+        console.say(f"PASS  {probe.label}")
 
-    if not _hook_is_reachable(env):
+    if not _resolves_in_a_plain_shell(command, answers, paths, env):
+        shared = _is_shared_scope(answers.scope)
+        resolved = env.hook_executable or "not found"
+        console.say()
         console.say(
-            "WARN  `janus-hook` is not on PATH. Claude runs hooks through its own "
-            "shell; if it cannot find the command the hook fails OPEN."
+            f"{'WARN' if shared else 'FAIL'}  the hook command runs here but NOT in a "
+            f"plain shell."
         )
+        console.say(
+            "Claude Code runs hooks through its own shell, using the PATH of the session "
+            "you start later — not this one. A command it cannot find exits 127, and a "
+            "non-zero-but-not-2 hook exit is treated as a non-blocking error: the tool "
+            "call proceeds and nothing is enforced, with no error shown."
+        )
+        if shared:
+            console.bullet(
+                f"{paths.settings.name} is shared, so it carries the portable "
+                f"`janus-hook` rather than a path into this machine's venv ({resolved})."
+            )
+            console.bullet(
+                "Make `janus-hook` available to plain shells (pipx, a system install, or "
+                "your shell profile), or re-run with `--scope project-local` for a private "
+                "settings file, which gets an absolute path and needs nothing on PATH."
+            )
+        else:
+            console.bullet(
+                f"A private settings file is written with an absolute path, so this should "
+                f"not happen — check the hook command in {paths.settings}. "
+                f"(`janus-hook` resolved to: {resolved}.)"
+            )
+            ok = False
         console.bullet("The permissions.deny backstop still applies — keep it enabled.")
 
     return ok
@@ -611,8 +777,27 @@ def _lint(policy_path: Path) -> list[str]:
     return validate_policy_structure(policy, CLAUDE_CODE_TOOL_DEFS)
 
 
-def _hook_is_reachable(env: WizardEnv) -> bool:
-    return bool(env.hook_executable)
+def _resolves_in_a_plain_shell(
+    command: str, answers: WizardAnswers, paths: WizardPaths, env: WizardEnv
+) -> bool:
+    """Whether the written command still works with this venv off ``PATH``.
+
+    One probe answers this for all of them: the question is binary — either the
+    shell can find and run the command or it cannot — and re-running every
+    check under the stripped ``PATH`` would cost a subprocess apiece to learn
+    the same fact. A deny-expecting probe is used so that "ran, and still
+    enforces" is what gets confirmed, not merely "exited zero".
+    """
+    scrubbed = _venv_free_path()
+    if scrubbed == os.environ.get("PATH", ""):
+        return True  # no venv to strip; the shell sees what we see
+    canary = next((p for p in build_probes(answers, paths, env) if p.expect_deny), None)
+    if canary is None:
+        return True
+    try:
+        return _exec_decide(command, canary, env, path=scrubbed) == "deny"
+    except ProbeError:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -855,7 +1040,7 @@ def _run(args: Any, console: Console) -> int:
         )
     backup = write_settings(paths.settings, after)
 
-    ok = verify(console, paths=paths, answers=answers, env=env)
+    ok = verify(console, paths=paths, answers=answers, env=env, command=command)
     _closing(console, paths=paths, answers=answers, backup=backup, sidecar=sidecar)
 
     if not ok:
