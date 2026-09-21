@@ -33,8 +33,9 @@ and the run ends with SINK REACHED.
 
 The guarded version of this same agent is in ``agent.py``.
 
-Models go through LiteLLM (see ``model.py``), so ``--model`` takes any LiteLLM
-model string and needs that provider's API key.
+Models go through OpenRouter (see ``model.py``), so ``--model`` takes an
+OpenRouter model id and needs ``OPENROUTER_API_KEY``. The model must support
+tool calling.
 """
 
 from __future__ import annotations
@@ -58,7 +59,7 @@ POISONED_FIXTURE = HERE / "fixtures" / "poisoned_issue.json"
 
 DEFAULT_REPO = "Agentic-AI-Risk-Mitigation/Janus"
 DEFAULT_ISSUE = 4
-DEFAULT_MODEL = "openai/gpt-4o"
+DEFAULT_MODEL = "openai/gpt-4.1-mini"
 
 # The repo/issue the poisoned fixture describes.
 POISONED_TARGET = ("acme-corp", "widget-sdk", 42)
@@ -251,12 +252,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--model",
         default=DEFAULT_MODEL,
-        help=f"LiteLLM model string, e.g. anthropic/claude-sonnet-4-5 (default: {DEFAULT_MODEL}).",
+        help=f"OpenRouter model id; must support tool calling (default: {DEFAULT_MODEL}).",
     )
     parser.add_argument(
         "--api-base",
         default=None,
-        help="Override the provider endpoint — a LiteLLM proxy or a local Ollama server.",
+        help="Override the endpoint — a self-hosted OpenAI-compatible server instead of OpenRouter.",
     )
     parser.add_argument("--verbose", action="store_true", help="Print the tool-call trace.")
     args = parser.parse_args(argv)

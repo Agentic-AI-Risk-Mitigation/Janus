@@ -1,46 +1,45 @@
 """
-Model construction for both demo agents, via LiteLLM.
+Model construction for both demo agents, via OpenRouter.
 
 **This module imports no Janus.** The baseline agent depends on it, and
 ``baseline_agent.py --prove-no-janus`` has to keep passing.
 
-Both agents call :func:`init_model`, so one provider decision covers the
-guarded and the unguarded path. Using the same model on both sides is what
-makes the comparison meaningful — any difference in outcome comes from the
-enforcement layer, not from the two agents talking to different models.
+Both agents call :func:`init_model`, so one model decision covers the guarded
+and the unguarded path. Running both sides on the same model is what makes the
+comparison mean anything — otherwise the difference in outcome could be the two
+agents talking to different models rather than the enforcement layer.
 
-Why LiteLLM
------------
+Why OpenRouter
+--------------
 
-LiteLLM is a single interface in front of roughly a hundred providers, so the
-demo is not wired to one vendor. The model string is ``provider/model``::
+One API key reaches every provider's models, so the demo is not wired to a
+single vendor and you can swap models by changing a string. OpenRouter speaks
+the OpenAI wire format, so this needs no dependency beyond ``langchain-openai``
+— which the ``langchain`` extra already installs.
 
-    openai/gpt-4o
-    anthropic/claude-sonnet-4-5
-    gemini/gemini-2.0-flash
-    groq/llama-3.3-70b-versatile
-    ollama/llama3.1                  local, no API key needed
+Set one environment variable::
 
-A bare name with no slash (``gpt-4o``) is treated by LiteLLM as OpenAI.
+    export OPENROUTER_API_KEY=sk-or-v1-...
 
-Credentials come from each provider's usual environment variable —
-``OPENAI_API_KEY``, ``ANTHROPIC_API_KEY``, and so on. :func:`credential_hint`
-checks for the common ones up front so a missing key produces a clear message
-instead of a provider SDK traceback halfway through a run.
+``--model`` takes an OpenRouter model id, which is always ``vendor/model``::
 
-Pointing at a proxy or a local model
-------------------------------------
+    openai/gpt-4.1-mini              cheap, fast, reliable tool calling
+    openai/gpt-4.1                   stronger, pricier
+    anthropic/claude-sonnet-4        strong reasoning
+    deepseek/deepseek-chat-v3-0324   very cheap
+    qwen/qwen3-32b                   cheapest of the capable options
 
-``api_base`` (the ``--api-base`` flag on both agents) redirects requests. That
-covers the two keyless setups:
+The full catalogue is at https://openrouter.ai/models. **The model must
+support tool calling** or the agent cannot call a tool at all — filter by the
+"Tools" capability on that page. Roughly 378 of OpenRouter's ~446 models
+qualify, but a model that lacks it will simply never invoke a tool and the
+demo will look like it silently did nothing.
 
-- a LiteLLM proxy:  ``--model openai/gpt-4o --api-base http://localhost:4000``
-- local Ollama:     ``--model ollama/llama3.1 --api-base http://localhost:11434``
+Pointing somewhere else
+-----------------------
 
-Install
--------
-
-``pip install langchain-litellm`` (pulls ``litellm``).
+``--api-base`` overrides the endpoint, for a self-hosted OpenAI-compatible
+server (vLLM, Ollama's OpenAI shim, LM Studio, or a gateway of your own).
 """
 
 from __future__ import annotations
@@ -48,90 +47,77 @@ from __future__ import annotations
 import os
 from typing import Any
 
-__all__ = ["init_model", "credential_hint", "LITELLM_KEY_ENV"]
+__all__ = ["init_model", "credential_hint", "OPENROUTER_BASE_URL", "API_KEY_ENV"]
 
-# Provider prefix -> the environment variable LiteLLM reads for its credentials.
-# Not exhaustive; it covers the providers someone is most likely to reach for.
-# A provider missing from this map simply gets no up-front warning.
-LITELLM_KEY_ENV: dict[str, str] = {
-    "openai": "OPENAI_API_KEY",
-    "anthropic": "ANTHROPIC_API_KEY",
-    "gemini": "GEMINI_API_KEY",
-    "groq": "GROQ_API_KEY",
-    "mistral": "MISTRAL_API_KEY",
-    "cohere": "COHERE_API_KEY",
-    "deepseek": "DEEPSEEK_API_KEY",
-    "xai": "XAI_API_KEY",
-    "together_ai": "TOGETHER_API_KEY",
-    "openrouter": "OPENROUTER_API_KEY",
-    "azure": "AZURE_API_KEY",
-    "bedrock": "AWS_ACCESS_KEY_ID",
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+API_KEY_ENV = "OPENROUTER_API_KEY"
+
+# Optional attribution headers. OpenRouter uses them to label traffic on your
+# dashboard; they are not required and carry nothing sensitive.
+_ATTRIBUTION_HEADERS = {
+    "HTTP-Referer": "https://github.com/Agentic-AI-Risk-Mitigation/Janus",
+    "X-Title": "Janus demo 2 - GitHub issue explainer",
 }
-
-# Providers that run locally and need no credentials.
-_KEYLESS_PROVIDERS = frozenset({"ollama", "ollama_chat", "vllm", "lm_studio", "hosted_vllm"})
-
-
-def _split_model(model: str) -> tuple[str, str]:
-    """
-    Split a LiteLLM model string into ``(provider, name)``.
-
-    A string with no slash is OpenAI, which is LiteLLM's own convention.
-    """
-    if "/" not in model:
-        return "openai", model
-    provider, name = model.split("/", 1)
-    return provider.lower(), name
 
 
 def credential_hint(model: str, api_base: str | None = None) -> str | None:
     """
     Return a message describing a missing credential, or ``None`` if fine.
 
-    Only a hint: an unrecognised provider, a keyless local provider, or an
-    explicit ``api_base`` (a proxy supplies its own auth) all return ``None``
-    and let LiteLLM raise its own error if something is actually wrong.
+    A custom ``api_base`` points at something other than OpenRouter, which
+    supplies its own auth (or none), so no key is demanded in that case.
     """
-    provider, _ = _split_model(model)
-
-    if provider in _KEYLESS_PROVIDERS or api_base:
+    if api_base:
         return None
-
-    env_var = LITELLM_KEY_ENV.get(provider)
-    if env_var is None or os.environ.get(env_var):
+    if os.environ.get(API_KEY_ENV):
         return None
 
     return (
-        f"{env_var} is not set, which LiteLLM needs for '{model}'.\n"
-        f"  Set it, or pass --model for a provider you do have a key for,\n"
-        f"  or run a local model:  --model ollama/llama3.1 "
-        f"--api-base http://localhost:11434"
+        f"{API_KEY_ENV} is not set, and '{model}' is served through OpenRouter.\n"
+        f"  Get a key at https://openrouter.ai/keys, then:\n"
+        f"    export {API_KEY_ENV}=sk-or-v1-...\n"
+        f"  Or pass --api-base to use a local OpenAI-compatible server instead."
     )
 
 
 def init_model(model: str, api_base: str | None = None, temperature: float = 0.0) -> Any:
     """
-    Build a LiteLLM-backed chat model.
+    Build a chat model backed by OpenRouter.
+
+    OpenRouter is OpenAI wire-compatible, so this is ``ChatOpenAI`` pointed at
+    OpenRouter's base URL rather than a bespoke client. That matters for this
+    demo: tool calling goes through the same well-exercised code path as a
+    direct OpenAI call.
 
     Args:
-        model: LiteLLM model string, e.g. ``"anthropic/claude-sonnet-4-5"``.
-        api_base: Override the provider endpoint — a LiteLLM proxy or a local
-            server. ``None`` uses the provider's default.
-        temperature: Sampling temperature. The demo pins 0 so repeated runs
-            are comparable.
+        model: OpenRouter model id, e.g. ``"openai/gpt-4.1-mini"``. Must be a
+            model that supports tool calling.
+        api_base: Override the endpoint. ``None`` uses OpenRouter.
+        temperature: Sampling temperature. The demo pins 0 so repeated runs are
+            comparable.
 
     Raises:
-        ImportError: If ``langchain-litellm`` is not installed.
+        ImportError: If ``langchain-openai`` is not installed.
     """
     try:
-        from langchain_litellm import ChatLiteLLM
+        from langchain_openai import ChatOpenAI
     except ImportError as exc:  # pragma: no cover - depends on the environment
         raise ImportError(
-            "LiteLLM support requires langchain-litellm.\n"
-            "Install with: pip install langchain-litellm"
+            "OpenRouter support requires langchain-openai.\n"
+            'Install with: pip install -e ".[langchain]"'
         ) from exc
 
-    kwargs: dict[str, Any] = {"model": model, "temperature": temperature}
-    if api_base:
-        kwargs["api_base"] = api_base
-    return ChatLiteLLM(**kwargs)
+    from pydantic import SecretStr
+
+    # A placeholder keeps ChatOpenAI from raising on construction when the key
+    # is absent; callers run credential_hint() first, and a custom api_base may
+    # legitimately need no key at all.
+    api_key = os.environ.get(API_KEY_ENV) or "unset"
+
+    return ChatOpenAI(
+        model=model,
+        base_url=api_base or OPENROUTER_BASE_URL,
+        api_key=SecretStr(api_key),
+        temperature=temperature,
+        default_headers=dict(_ATTRIBUTION_HEADERS),
+    )

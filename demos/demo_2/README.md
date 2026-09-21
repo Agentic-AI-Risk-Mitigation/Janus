@@ -238,42 +238,47 @@ published. If that file exists after a *guarded* run, enforcement failed.
 
 ---
 
-## Models (LiteLLM)
+## Models (OpenRouter)
 
 Both agents get their model from `model.py`, which goes through
-[LiteLLM](https://docs.litellm.ai/). One provider decision covers the guarded
-and the unguarded path — running both sides on the same model is what makes the
+[OpenRouter](https://openrouter.ai/). One model decision covers the guarded and
+the unguarded path — running both sides on the same model is what makes the
 comparison mean anything.
 
-`--model` takes a LiteLLM model string, `provider/model`:
+One key reaches every vendor:
 
 ```bash
---model openai/gpt-4o
---model anthropic/claude-sonnet-4-5
---model gemini/gemini-2.0-flash
---model groq/llama-3.3-70b-versatile
---model ollama/llama3.1            # local, no API key
+export OPENROUTER_API_KEY=sk-or-v1-...     # https://openrouter.ai/keys
 ```
 
-Credentials come from each provider's usual environment variable
-(`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GROQ_API_KEY`, …). Both agents check
-for the expected one up front and print what is missing, rather than failing
-with a provider traceback part-way through a run.
+OpenRouter speaks the OpenAI wire format, so this needs no dependency beyond
+`langchain-openai`, which the `langchain` extra already installs. Tool calls go
+through the same well-exercised path as a direct OpenAI call.
+
+`--model` takes an OpenRouter model id (`vendor/model`):
+
+| Model | Released | $/Mtok in/out | Notes |
+|---|---|---|---|
+| `openai/gpt-4.1-mini` | 2025-04-14 | 0.40 / 1.60 | **default** — cheap, reliable tool calling |
+| `openai/gpt-4.1` | 2025-04-14 | 2.00 / 8.00 | stronger |
+| `anthropic/claude-sonnet-4` | 2025-05-22 | 3.00 / 15.00 | strongest of these |
+| `deepseek/deepseek-chat-v3-0324` | 2025-03-24 | 0.25 / 1.00 | very cheap |
+| `qwen/qwen3-32b` | 2025-04-28 | 0.08 / 0.28 | cheapest capable option |
+
+> **The model must support tool calling.** A model without it never invokes a
+> tool, and the demo looks like it silently did nothing rather than failing
+> loudly. Filter by the "Tools" capability at https://openrouter.ai/models.
 
 `model.py` imports no Janus, so the baseline agent can depend on it and
 `--prove-no-janus` keeps passing.
 
-### Keyless options
+### Pointing somewhere else
 
-`--api-base` redirects requests, which covers the two setups that need no
-provider key:
+`--api-base` overrides the endpoint for a self-hosted OpenAI-compatible server
+(vLLM, LM Studio, Ollama's OpenAI shim, or your own gateway):
 
 ```bash
-# A LiteLLM proxy
---model openai/gpt-4o --api-base http://localhost:4000
-
-# A local model via Ollama
---model ollama/llama3.1 --api-base http://localhost:11434
+--model my-local-model --api-base http://localhost:11434/v1
 ```
 
 ### Reading a private repository
@@ -287,8 +292,7 @@ export GITHUB_TOKEN=$(gh auth token)
 ## Notes
 
 - HTTP uses the standard library, so the demo adds no dependency beyond
-  LangChain and LiteLLM:
-  `pip install -e ".[langchain]" && pip install langchain-litellm`.
+  LangChain. `pip install -e ".[langchain]"`.
 - Works on LangChain 0.3 (`AgentExecutor`) and 1.x (`create_agent`); the
   generation is detected at construction.
 - `GITHUB_TOKEN` is optional — it raises the anonymous 60 requests/hour limit
