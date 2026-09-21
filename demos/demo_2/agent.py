@@ -46,7 +46,7 @@ from pathlib import Path
 from typing import Any
 
 from demos.demo_2.github_api import load_fixture
-from demos.demo_2.model import credential_hint, init_model
+from demos.demo_2.model import credential_hint, init_model, load_env_file
 from demos.demo_2.tools import GITHUB_TOOLS
 from janus import PolicyEnforcer
 from janus.exceptions import PolicyViolation
@@ -395,6 +395,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--verbose", action="store_true", help="Show LangChain's trace.")
     args = parser.parse_args(argv)
+    load_env_file()
 
     if args.check:
         return run_check()

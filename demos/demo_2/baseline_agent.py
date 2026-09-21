@@ -51,7 +51,7 @@ from demos.demo_2.github_api import (
     reset_sink,
     sink_was_reached,
 )
-from demos.demo_2.model import credential_hint, init_model
+from demos.demo_2.model import credential_hint, init_model, load_env_file
 
 HERE = Path(__file__).parent
 PROMPT_PATH = HERE / "prompts" / "system_prompt.md"
@@ -261,6 +261,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--verbose", action="store_true", help="Print the tool-call trace.")
     args = parser.parse_args(argv)
+    load_env_file()
 
     if args.prove_no_janus:
         return prove_no_janus()

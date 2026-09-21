@@ -47,7 +47,13 @@ from __future__ import annotations
 import os
 from typing import Any
 
-__all__ = ["init_model", "credential_hint", "OPENROUTER_BASE_URL", "API_KEY_ENV"]
+__all__ = [
+    "init_model",
+    "credential_hint",
+    "load_env_file",
+    "OPENROUTER_BASE_URL",
+    "API_KEY_ENV",
+]
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 API_KEY_ENV = "OPENROUTER_API_KEY"
@@ -58,6 +64,43 @@ _ATTRIBUTION_HEADERS = {
     "HTTP-Referer": "https://github.com/Agentic-AI-Risk-Mitigation/Janus",
     "X-Title": "Janus demo 2 - GitHub issue explainer",
 }
+
+
+def load_env_file(path: str | None = None) -> str | None:
+    """
+    Load ``KEY=VALUE`` lines from a ``.env`` file into the environment.
+
+    Deliberately stdlib-only rather than pulling in python-dotenv, so the demo
+    keeps its "no dependency beyond LangChain" property. Real environment
+    variables win — an exported key is never overwritten by the file.
+
+    Looks in the current directory, then at the repository root. Returns the
+    path it loaded, or ``None`` if there was nothing to load.
+    """
+    from pathlib import Path
+
+    if path is not None:
+        candidates = [Path(path)]
+    else:
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        candidates = [Path.cwd() / ".env", repo_root / ".env"]
+
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        for line in candidate.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            # Tolerate quoted values, which .env files commonly carry.
+            value = value.strip().strip("\"'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+        return str(candidate)
+
+    return None
 
 
 def credential_hint(model: str, api_base: str | None = None) -> str | None:
