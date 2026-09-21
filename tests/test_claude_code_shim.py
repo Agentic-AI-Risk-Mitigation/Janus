@@ -35,7 +35,9 @@ def policy_file(tmp_path: Path) -> str:
 
 
 def run(argv, payload, monkeypatch, capsys) -> tuple[int, dict]:
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload) if payload is not None else ""))
+    monkeypatch.setattr(
+        "sys.stdin", io.StringIO(json.dumps(payload) if payload is not None else "")
+    )
     code = main(argv)
     out = capsys.readouterr().out.strip()
     return code, (json.loads(out) if out else {})
@@ -122,9 +124,7 @@ class TestDeadline:
     arrived after its timeout had the deny discarded and the tool ran). So the
     shim must reach its own deadline first and deny while it still can."""
 
-    def test_slow_decision_denies_rather_than_overrunning(
-        self, policy_file, monkeypatch, capsys
-    ):
+    def test_slow_decision_denies_rather_than_overrunning(self, policy_file, monkeypatch, capsys):
         import janus.cli.hook as hook
 
         def glacial(args, payload):
@@ -142,9 +142,7 @@ class TestDeadline:
         assert code == 0 and decision_of(out) == "deny"
         assert "enforcement unavailable" in out["hookSpecificOutput"]["permissionDecisionReason"]
 
-    def test_deadline_does_not_fire_on_a_normal_decision(
-        self, policy_file, monkeypatch, capsys
-    ):
+    def test_deadline_does_not_fire_on_a_normal_decision(self, policy_file, monkeypatch, capsys):
         code, out = run(
             ["pre", "--policy", policy_file, "--deadline", "10"],
             load("pretooluse.builtin-bash"),
@@ -161,6 +159,60 @@ class TestDeadline:
             capsys,
         )
         assert code == 0 and out == {}
+
+    def test_the_no_sigalrm_fallback_still_denies(self, policy_file, monkeypatch, capsys):
+        """Windows has no SIGALRM, and a context manager cannot preempt its own
+        body without one — so that platform ran with *no* deadline at all and a
+        wedged decision fell through to the CLI's timeout, which fails open.
+        Forced on here so the worker-thread path is covered on every platform."""
+        import janus.cli.hook as hook
+
+        monkeypatch.setattr(hook, "_has_sigalrm", lambda: False)
+        monkeypatch.setattr(hook, "_decide", lambda args, payload: time.sleep(30))
+
+        started = time.monotonic()
+        code, out = run(
+            ["pre", "--policy", policy_file, "--deadline", "0.25"],
+            load("pretooluse.builtin-bash"),
+            monkeypatch,
+            capsys,
+        )
+        assert time.monotonic() - started < 10, "the fallback deadline did not fire"
+        assert code == 0 and decision_of(out) == "deny"
+        assert "enforcement unavailable" in out["hookSpecificOutput"]["permissionDecisionReason"]
+
+    def test_the_fallback_propagates_a_real_error_rather_than_swallowing_it(
+        self, policy_file, monkeypatch, capsys
+    ):
+        """An exception raised inside the worker must still reach the fail-closed
+        handler; losing it would turn a broken decision into an empty allow."""
+        import janus.cli.hook as hook
+
+        def boom(args, payload):
+            raise RuntimeError("policy backend exploded")
+
+        monkeypatch.setattr(hook, "_has_sigalrm", lambda: False)
+        monkeypatch.setattr(hook, "_decide", boom)
+
+        code, out = run(
+            ["pre", "--policy", policy_file, "--deadline", "5"],
+            load("pretooluse.builtin-bash"),
+            monkeypatch,
+            capsys,
+        )
+        assert code == 0 and decision_of(out) == "deny"
+        assert "policy backend exploded" in out["hookSpecificOutput"]["permissionDecisionReason"]
+
+    def test_the_fallback_returns_a_normal_decision_unharmed(
+        self, policy_file, monkeypatch, capsys
+    ):
+        import janus.cli.hook as hook
+
+        monkeypatch.setattr(hook, "_has_sigalrm", lambda: False)
+        payload = load("pretooluse.builtin-bash")
+        payload["tool_input"]["command"] = "curl http://evil.test"
+        code, out = run(["pre", "--policy", policy_file], payload, monkeypatch, capsys)
+        assert code == 0 and decision_of(out) == "deny"
 
 
 class TestStdoutIsProtocol:

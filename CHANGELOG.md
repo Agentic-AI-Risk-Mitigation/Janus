@@ -6,6 +6,85 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`janus init` could write a deployment that enforced nothing, and report seven PASS
+  lines over it.** Claude Code runs hooks through its own shell, with the `PATH` of the
+  session the operator starts later. `janus init` is normally run as `uv run janus init`,
+  which puts the project venv's `bin` on `PATH`, so `shutil.which("janus-hook")` succeeded
+  and the wizard wrote a bare `janus-hook` command. A `claude` session started from an
+  ordinary shell could not find it: the hook exited 127, and Claude Code treats a
+  non-zero-but-not-2 hook exit as a **non-blocking** error, so the tool ran and nothing was
+  enforced — confirmed live, a `Read` of `.env` that the policy denies succeeded with no
+  error shown. Now: the private scopes (`user`, `project-local`) get the resolved absolute
+  path, since those settings files are machine-specific anyway; the shared `project` scope
+  keeps the portable bare name — an absolute venv path would be wrong for teammates — and
+  verification warns loudly when it will not resolve in a plain shell. A `_hook_is_reachable`
+  warning for exactly this failure already existed and never fired, because it inspected the
+  wizard's `PATH` rather than the one that matters.
+- **`janus init` verified the policy instead of the deployment.** The closing checks called
+  `handle_cli_payload` in process, which answers "would this policy deny this payload" —
+  never "does the command just written to settings.json deny it". That is why the bug above
+  was invisible. `verify()` now executes the exact command string with `CLAUDE_PROJECT_DIR`
+  set as the CLI sets it, feeding payloads on stdin, and fails on a non-zero exit,
+  unparseable stdout (which also makes the shim's stdout-isolation property a standing
+  check), or a wrong decision. One additional probe re-runs with this interpreter's venv
+  stripped from `PATH`, standing in for the shell a real session gets.
+- **`Bash` could read the secrets `Read` was denied.** `.env` and `*.pem` were in
+  `SECRET_READ_PATTERN` but missing from `BASH_EXFIL_PATTERN`, so `Read` on `.env` was
+  denied while `cat .env` was allowed — the same secret, one tool apart. Found by a live
+  agent, which reached for `Bash` the moment `Read` was refused and returned the contents,
+  against a policy whose own verification had just printed `reading a .env file is denied`.
+  Both are now in the `Bash` deny in command-line form (`\.pem\b`, not the end-anchored
+  `\.pem$` a file path uses), the `.env.example` exemption is preserved, and probes now
+  cover the `Bash` route to each secret. Probe labels name the tool they tested
+  (`.env is denied (Read)` / `(Bash)`), because the old wording read as coverage the
+  deployment did not have. `docs/claude-code-deployment.md` now states plainly what shell
+  argument-matching can and cannot promise.
+
+- **Subagents were broken under `mode="policy"`, and subagent output silently stopped
+  tainting.** Two defects, found by re-running the payload-shape capture against CLI
+  2.1.278 (the fixtures were pinned at 2.1.233). First: `SubagentHandback` — the tool a
+  subagent uses to deliver its report to its caller — is a CLI-internal transport tool
+  that strict default-deny blocked, stranding every subagent's work. It is now in
+  `DEFAULT_CLI_PASSTHROUGH_TOOLS` alongside `ToolSearch`. Second, and worse: **the taint
+  source for subagent output moved.** On 2.1.233 the subagent's report came back in the
+  parent's `PostToolUse[Agent].tool_response.content`; on 2.1.278 that field is a
+  placeholder pointing at the `SubagentHandback` call (new `handback: "send"` key), and
+  the content travels in that call's `tool_input.message` — its *input*, while its
+  response is only a delivery receipt. A `TaintTracker` sourcing `Agent` therefore
+  recorded a fixed placeholder sentence and lost the subagent's content entirely, with
+  no error and no failing test, leaving every downstream sink open. The new
+  `CLI_INPUT_SOURCE_TOOLS` mapping makes the recording seam read the input for such
+  tools, gated on `PostToolUse` so a pre-decision or failed handback records nothing.
+  **Deployments that want subagent output to taint must now list `SubagentHandback` as a
+  source — naming `Agent` alone no longer reaches that content.** Three fixtures captured
+  from the live 2.1.278 session pin all of it.
+
+- **Path policies did not match on Windows — every secret-read deny was silently allowed
+  there.** Claude Code reports `tool_input.file_path` with the *host's* separator
+  (`C:\Users\...\.env`, verified against a live CLI 2.1.246 session), while the starter
+  policy anchored on `/`. Against the previous starter, reads of `.env`, `~/.ssh/id_rsa`,
+  `~/.aws/credentials` and `~/.claude/.credentials.json` were all **allowed** on Windows, as
+  were writes to `.claude/settings.json` — the rule meant to stop an agent disarming the
+  guard. Only `\.pem$` held, being the one pattern needing no separator. Path patterns now
+  use a separator class (`janus.cli.starter_policy.SEP`, `[/\\]`), user-supplied paths are
+  normalized the same way, and `examples/claude_code/policy.starter.json` is regenerated to
+  match. A Windows payload fixture captured from a live session
+  (`tests/fixtures/claude_code_payloads/pretooluse.windows-read.json`) pins it. The bug was
+  invisible because every prior fixture, and the whole CI matrix, was Linux.
+- **`janus init` verification reported PASS against paths the CLI never sends.** Its probes
+  built paths with `as_posix()`, so on Windows they exercised forward slashes while the
+  deployment received backslashes — seven green checks on a policy that was allowing `.env`
+  reads. Probes now use the host's native separator.
+- **The `janus-hook` deadline was inert on Windows.** `_deadline` needs `SIGALRM`, so on
+  Windows it degraded to no deadline at all, and a wedged decision ran until the CLI's own
+  hook timeout — which fails **open**. A worker-thread fallback restores the property: the
+  shim reaches its own limit and emits a deny while it still can. This also fixes the one
+  test that had been failing on Windows.
+- CI now runs the suite on `windows-latest` as well as `ubuntu-latest`. All three bugs above
+  were platform-specific and a Linux-only matrix could not see any of them.
+
 ### Changed
 
 - **BREAKING — `openai` and `jinja2` moved out of core dependencies** into the new `generate`
@@ -35,6 +114,24 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`janus init` — an onboarding wizard, behind a new `janus` console script.** Setting Janus
+  up on the Claude Code CLI previously meant hand-writing a policy, pasting a hooks block into
+  a settings file, and merging the backstop by hand; a guard nobody finishes installing
+  protects nothing. `janus init` asks a handful of questions (scope, what to protect, network
+  posture, git posture, MCP servers, strictness), shows the exact settings diff, and on
+  confirmation writes the policy, the `PreToolUse` entry — with the explicit `timeout` the docs
+  always asked for and no example ever showed — and the `permissions.deny` backstop. It then
+  verifies by feeding synthetic payloads through `handle_cli_payload` with the flags it just
+  wrote, so a `PASS` reflects the deployed decision path rather than the wizard's intent.
+  Re-running updates the existing hook in place; foreign hooks, foreign deny entries, and
+  unrelated settings are never touched, and the previous file is backed up. `--dry-run`,
+  `--yes` (CI; a non-TTY without it is refused rather than defaulted), `--scope`, `--force`.
+  Optional: with the `generate` extra and an API key, it can draft argument-level rules for
+  review — accepting *replaces* a tool's blanket allow, since generated priority-100 rules
+  would otherwise sit unreachable behind it.
+  The `janus` script is deliberately separate from `janus-hook`, which stays a pure
+  decision process with no interactive surface. `janus doctor` delegates to the same
+  `janus.cli.hook.run_doctor` (renamed from `_doctor`) that `janus-hook doctor` uses.
 - **Claude Code CLI adapter** (`janus.adapters.claude_code` + the `janus-hook` console script,
   core install — no extra): enforce a Janus policy on the *interactive* `claude` CLI via its
   `PreToolUse`/`PostToolUse` hooks. Unlike the SDK path, Janus does not construct the session

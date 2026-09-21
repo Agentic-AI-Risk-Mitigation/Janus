@@ -83,3 +83,25 @@ def test_claude_code_adapter_imports_on_a_core_install():
 def test_janus_hook_shim_imports_on_a_core_install():
     out = _run("from janus.cli.hook import main; print(callable(main))")
     assert out == "True"
+
+
+def test_janus_umbrella_cli_imports_on_a_core_install():
+    """`janus init` is the first thing a new user runs — before they have
+    installed any extra. It must not need one."""
+    out = _run(
+        "from janus.cli.main import main, _build_parser; "
+        "_build_parser().parse_args(['init', '--yes']); "
+        "print(callable(main))"
+    )
+    assert out == "True"
+
+
+def test_wizard_does_not_import_the_generator_or_the_adapter_eagerly():
+    """The LLM branch and the decision probes are lazy: importing the wizard
+    must stay cheap, and must not fail where the `generate` extra is absent."""
+    out = _run(
+        "import janus.cli.init, sys; "
+        "print(sorted(m for m in ('janus.policy.generator', 'openai', 'jinja2') "
+        "if m in sys.modules))"
+    )
+    assert out == "[]"

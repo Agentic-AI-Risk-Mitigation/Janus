@@ -87,6 +87,9 @@ docs = [
 # The Claude Code CLI hook shim. Core-install only: it must run wherever the
 # `claude` CLI runs, without the SDK or any provider extra.
 janus-hook = "janus.cli.hook:main"
+# Operator commands (setup, diagnostics). Kept out of the shim so the hot path
+# stays a decision process with no interactive surface.
+janus = "janus.cli.main:main"
 
 [project.urls]
 Documentation = "https://agentic-ai-risk-mitigation.github.io/Janus/"

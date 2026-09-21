@@ -276,6 +276,11 @@ doc.
 
 ### Wiring it (phase 1: settings file, stateless)
 
+`janus init` does all of the below interactively — policy, hook entry, and backstop — and
+verifies the result through this same decision path; see
+[Claude Code Deployment → Wizard setup](claude-code-deployment.md#wizard-setup-janus-init).
+By hand:
+
 ```bash
 janus-hook backstop > /tmp/backstop.json   # the permissions.deny block; merge into settings
 ```
@@ -285,7 +290,8 @@ janus-hook backstop > /tmp/backstop.json   # the permissions.deny block; merge i
   "hooks": {
     "PreToolUse": [
       { "hooks": [{ "type": "command",
-                    "command": "janus-hook pre --policy /etc/janus/policy.json --mode gate" }] }
+                    "command": "janus-hook pre --policy /etc/janus/policy.json --mode gate",
+                    "timeout": 10 }] }
     ]
   }
 }
@@ -325,6 +331,31 @@ the untouched payload in `.raw` for audit. `normalize_cli_events` additionally f
 one of these behaviours is pinned by verbatim payload captures in
 `tests/fixtures/claude_code_payloads/` — where the fixtures and the docs disagree, the fixtures
 win.
+
+### Subagents: `SubagentHandback`
+
+Two things to know if your agents spawn subagents.
+
+**It is never policy-gated.** `SubagentHandback` is how a subagent delivers its final report
+to its caller. It reaches no resource, so denying it accomplishes nothing except stranding the
+subagent's work — `mode="policy"` used to do exactly that. It now sits in
+`DEFAULT_CLI_PASSTHROUGH_TOOLS` next to `ToolSearch`.
+
+**But unlike `ToolSearch`, it carries content — and it is where subagent output enters the
+parent turn.** This changed under us. On CLI 2.1.233 the subagent's report came back in the
+parent's `PostToolUse[Agent]` result; on 2.1.278 that field is a placeholder pointing at the
+handback call, and the report travels in `SubagentHandback`'s **`tool_input.message`** (its
+response is only a delivery receipt). So:
+
+```python
+TaintTracker(sources={"SubagentHandback": "subagent", ...})
+```
+
+**Listing `Agent` alone no longer reaches that content** — it records a fixed placeholder
+sentence, with no error and nothing failing, while every downstream sink stays open. The
+recording seam reads the input for tools named in `CLI_INPUT_SOURCE_TOOLS`, gated on
+`PostToolUse` so a handback that was denied or failed records nothing. Both CLI versions'
+shapes are pinned in `tests/fixtures/claude_code_payloads/`.
 
 `claude_code_resolve_name(name, known_servers=...)` maps `mcp__<server>__<tool>` (and the
 plugin form `mcp__plugin_<plugin>_<server>__<tool>`) to the bare policy key. Supply

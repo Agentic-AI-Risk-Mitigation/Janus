@@ -99,6 +99,7 @@ import json
 import re
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field, replace
+from types import MappingProxyType
 from typing import Any, Literal
 
 from janus.adapters._base import PolicySource, resolve_enforcer
@@ -117,6 +118,7 @@ from janus.policy.taint import TaintTracker
 __all__ = [
     "ABSTAIN",
     "ALLOW",
+    "CLI_INPUT_SOURCE_TOOLS",
     "CliDecision",
     "CliHookEvent",
     "DEFAULT_CLI_PASSTHROUGH_TOOLS",
@@ -165,10 +167,47 @@ GateAction = Literal["deny", "ask"]
 
 #: CLI-internal tools that are transport, not agent capability, and must never
 #: be policy-gated — blocking them breaks the session without denying anything
-#: consequential. ``ToolSearch`` loads deferred tool *schemas* (observed on the
-#: wire in ``posttoolbatch.top-level.json``); it executes nothing. Extend, don't
-#: drop, if a future CLI adds more.
-DEFAULT_CLI_PASSTHROUGH_TOOLS = frozenset({"ToolSearch"})
+#: consequential. Extend, don't drop, if a future CLI adds more.
+#:
+#: * ``ToolSearch`` loads deferred tool *schemas* (observed on the wire in
+#:   ``posttoolbatch.top-level.json``); it executes nothing, and carries no
+#:   content in either direction.
+#: * ``SubagentHandback`` is how a subagent delivers its final report to its
+#:   caller (observed on CLI 2.1.278). It reaches no resource and cannot be
+#:   "denied" in any meaningful sense — refusing it only strands the subagent's
+#:   work — but **it is not inert the way ``ToolSearch`` is**, and the
+#:   difference matters: its ``tool_input.message`` is the subagent's own text
+#:   crossing into the parent turn. It is therefore a passthrough at the
+#:   *decision* seam and a taint **source** at the *recording* seam; see
+#:   :data:`CLI_INPUT_SOURCE_TOOLS`.
+DEFAULT_CLI_PASSTHROUGH_TOOLS = frozenset({"ToolSearch", "SubagentHandback"})
+
+#: Tools whose *input* carries the content entering the model's context, mapped
+#: to the argument holding it. The recording seam reads these instead of
+#: ``tool_response``.
+#:
+#: This exists because of a change that silently moved a taint source. On CLI
+#: 2.1.233, a subagent's report came back in the parent's
+#: ``PostToolUse[Agent].tool_response.content`` — the fixture
+#: ``posttooluse.agent-result.json`` has the subagent's actual words there. On
+#: 2.1.278 that same field is a *placeholder*:
+#:
+#:     "This agent's report was delivered to you as a message from
+#:      "<agent_id>" (its SubagentHandback call). Read it there; it is not
+#:      repeated here."
+#:
+#: — with a new ``handback: "send"`` key marking the mode
+#: (``posttooluse.agent-result.handback.json``). A tracker that derives taint
+#: from the ``Agent`` result therefore records that sentence and **loses the
+#: subagent's content entirely**: no error, no missing key, just a source that
+#: silently stops producing labels while every downstream sink stays open. That
+#: is the exact failure class this adapter exists to prevent, so the content is
+#: read from where it actually lives.
+#:
+#: ``SubagentHandback``'s own ``tool_response`` is a delivery receipt
+#: (``{"success": true, "message": "Report delivered to your caller."}``) and is
+#: deliberately *not* what gets recorded.
+CLI_INPUT_SOURCE_TOOLS: Mapping[str, str] = MappingProxyType({"SubagentHandback": "message"})
 
 #: Permission modes under which nothing downstream will ask a human. Verified on
 #: CLI 2.1.233: a hook ``deny`` and a hook ``ask`` are both still honored here —
@@ -701,6 +740,7 @@ def record_cli_event(
     *,
     resolve_name: NameResolver = claude_code_resolve_name,
     unwrap: Callable[[Any], Any] | None = unwrap_cli_response,
+    input_sources: Mapping[str, str] = CLI_INPUT_SOURCE_TOOLS,
 ) -> dict[str, list[str]] | list[str] | None:
     """Record one completed tool call into session state.
 
@@ -726,7 +766,42 @@ def record_cli_event(
     would double-count events and hand content-aware classifiers different
     bytes for the same call; the batch event is for cross-checking, not
     derivation.
+
+    ``input_sources`` names the tools whose *input* is the content, not their
+    output — currently ``SubagentHandback``, whose response is a delivery
+    receipt while the subagent's report sits in ``tool_input.message``. See
+    :data:`CLI_INPUT_SOURCE_TOOLS` for why that indirection is not optional on
+    CLI 2.1.278. Recorded under the tool's own policy key, so a deployment that
+    wants subagent output to taint the session lists ``SubagentHandback`` as a
+    source; naming ``Agent`` alone no longer reaches that content.
     """
+    source_arg = input_sources.get(event.tool_name or "")
+    if source_arg is not None and event.event == "PostToolUse":
+        # Gated on the event, not just the tool. The content lives in the
+        # *input*, which is already populated at ``PreToolUse`` — recording
+        # there would taint the session for a handback that may still be
+        # denied, and ``PostToolUseFailure`` means the report was never
+        # delivered to the caller at all. Neither put anything in the model's
+        # context, and the no-output rule below can no longer be what catches
+        # that, since these tools are recorded despite their output.
+        content = event.tool_input.get(source_arg)
+        if content is None:
+            # Do not return quietly. This branch exists *because* a taint
+            # source silently relocated once already; a configured
+            # input-source tool whose argument has gone missing is that same
+            # drift happening again, and the whole point is that it must
+            # surface as a detected anomaly rather than as zero taint nobody
+            # notices. Recording is still skipped — inventing content would be
+            # worse — but the deployment gets told.
+            get_logger().warning(
+                f"'{event.tool_name}' is configured as an input taint source on "
+                f"argument '{source_arg}', but the argument is absent from this "
+                f"PostToolUse payload; nothing recorded. This is the signature of "
+                f"a CLI payload change — re-run the fixture capture."
+            )
+            return None
+        return session.record_output(resolve_name(event.tool_name or ""), content)
+
     if event.tool_output is None:
         return None
     output = event.tool_output

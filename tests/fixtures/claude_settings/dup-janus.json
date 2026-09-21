@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "janus-hook pre --policy /a/policy.json --mode gate"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "keep-me pre"
+          },
+          {
+            "type": "command",
+            "command": "janus-hook pre --policy /b/policy.json --mode policy"
+          }
+        ]
+      }
+    ]
+  }
+}

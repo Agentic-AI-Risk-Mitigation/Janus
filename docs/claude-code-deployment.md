@@ -46,6 +46,75 @@ Three tiers, three guarantees:
 The plugin and managed tiers ship in later phases; the design and verified probe results
 live in `plans/claude-code-plugin-design.md` in the repository.
 
+## Wizard setup (`janus init`)
+
+`janus init` builds the tier-1 deployment — policy, `PreToolUse` hook, and the
+`permissions.deny` backstop — from a short interactive questionnaire. It is a convenience
+over the manual steps in [Getting Started](getting-started.md), not a different security
+posture: what it writes is a settings-file hook deployment, with tier 1's guarantees and
+tier 1's limits.
+
+What it touches, and nothing else:
+
+| Path | Contents |
+|---|---|
+| `.claude/janus/policy.json` | the policy, built from the starter plus your answers |
+| `.claude/settings*.json` | the `PreToolUse` entry (with an explicit `timeout`) and the merged `permissions.deny` |
+| `.claude/janus/config.json` | only when you name MCP servers — the `known_servers` sidecar |
+
+Operational notes:
+
+- **Scope** is the first question: `.claude/settings.json` (shared with the team),
+  `.claude/settings.local.json` (just you), or `~/.claude/settings.json` (every project).
+  On Windows the project default is the `.local` file, because the hook command must carry
+  absolute paths there and a shared file would be machine-specific.
+- **Scope also decides how the hook command names `janus-hook`.** Claude Code runs hooks
+  through its own shell, using the `PATH` of the session *you start later* — not the one
+  `janus init` ran in. Those differ in the usual case: the wizard is run as
+  `uv run janus init`, which puts the project venv's `bin` on `PATH`, while an ordinary
+  `claude` session has no such entry. A command the shell cannot find exits 127, and Claude
+  Code treats a non-zero-but-not-2 hook exit as a **non-blocking** error — the tool call
+  proceeds and nothing is enforced, without an error message.
+
+  So the **private** scopes (`project-local`, `user`) get the resolved absolute path: those
+  files are machine-specific already. The **shared** `project` scope keeps the portable bare
+  `janus-hook`, because an absolute path into your venv would be wrong for every teammate —
+  and there the verification step warns loudly if the name will not resolve in a plain shell.
+  If you see that warning, either make `janus-hook` available outside the venv (pipx, a
+  system install, or your shell profile) or use `--scope project-local`.
+- **Verification runs the command, not the policy.** The closing checks execute the exact
+  command string just written to the settings file, with `CLAUDE_PROJECT_DIR` set as the CLI
+  sets it, and feed it hook payloads on stdin — then repeat every check with the venv
+  stripped from `PATH`. A check that asks the policy directly cannot see a hook command that
+  the deployed session will never successfully run.
+- **Re-running is idempotent.** A Janus hook is recognized by its command, so a second run
+  updates the entry rather than appending one; duplicate entries from hand-editing collapse
+  to one. Foreign hooks and their order are never touched.
+- **`permissions.deny` merges additively.** Entries you added by hand survive. Relaxing an
+  answer (allowing `git push`, opening the network) never silently removes a deny — the
+  wizard asks first.
+- **The previous settings file is backed up** to `settings.json.bak-<timestamp>` before
+  every write, and the new file lands via an atomic replace.
+- **Verification runs the deployed path**, feeding synthetic `PreToolUse` payloads through
+  `handle_cli_payload` with the exact flags it just wrote. A failing probe exits non-zero
+  with the files still written, so you can inspect the policy.
+- **`--yes` is for CI.** Without it, a non-TTY stdin is refused rather than silently
+  accepting defaults nobody chose.
+- **PATH matters.** Claude runs hooks through its own shell; if `janus-hook` is not
+  resolvable there the hook fails *open*. The wizard warns when the console script is not
+  on PATH and falls back to a `python -m janus.cli.hook` command pinned to the interpreter
+  that has Janus installed. This is one more reason the backstop is not optional.
+- **Path patterns match either separator.** Claude Code reports `file_path` using the
+  host's native separator (`C:\Users\...\.env` on Windows, verified on CLI 2.1.246), so
+  every path rule the wizard writes uses a `[/\\]` class. A `/`-only pattern silently
+  matches nothing on Windows — if you hand-edit the policy, keep the class.
+
+The same caveat as every tier-1 deployment applies, and the wizard concentrates it: the
+file it writes is a file the guarded agent can also write. The starter policy denies
+`Write`/`Edit` of `.claude/settings*.json` and the Janus directory, but `Bash` can route
+around that, and an agent that can run commands can run `janus init` itself. Treat tier 1
+as a policy monitor; move to the plugin tier when you need the session to stay guarded.
+
 ## Why managed settings must use the force-enabled-plugin path
 
 The "obvious" enterprise design — declare the hooks inline in managed settings, skip the
@@ -66,6 +135,47 @@ holds with zero hooks running. Extend it with the true sinks of your deployment 
 MCP tools included).
 
 ## Residual risk, stated plainly
+
+### What `Bash` argument matching can and cannot promise
+
+The starter policy denies secrets on `Read` *and* on `Bash`, because an agent refused one
+reaches for the other. That was not hypothetical: in a live session, `Read` on `.env` was
+denied and the agent immediately ran `cat .env` and got the contents, against a policy whose
+own verification had just printed `reading a .env file is denied`. `.env` and `*.pem` are now
+in both patterns.
+
+**Do not read that as airtight.** Matching a shell command as a string is best-effort, and
+the ways past it are ordinary, not exotic:
+
+```bash
+cat .en''v              # string-split
+V=.env; cat "$V"        # indirection
+base64 .env             # a different reader
+cp .env /tmp/x; cat /tmp/x   # copy first, read later
+```
+
+Closing the one-liner is still worth doing — it is what an agent actually reaches for, and
+an injected instruction rarely tries twice. But the controls that hold under a *motivated*
+attempt are different in kind:
+
+- **`permissions.deny`** — enforced by the CLI itself, with no hook running. This is why it
+  is not optional.
+- **Not granting `Bash` at all**, or restricting it to an allowlist of commands. A tool the
+  session does not have cannot be talked into anything.
+- **The [Agent SDK path](adapters.md#claude-agent-sdk-claude-code)**, where `janus_options()`
+  controls which tools exist at session start.
+
+The patterns match the *command string*, so they deny any `Bash` call that names a protected
+path — including harmless ones. `ls -la .env` and `docker compose --env-file .env up` are
+both denied, though neither prints the file. That is deliberate: telling "reads it" from
+"mentions it" reliably would require parsing arbitrary shell, which is the same losing game
+as above. If a workflow needs one of these, allow it explicitly rather than widening the
+pattern.
+
+Treat the `Bash` secret patterns as a tripwire that catches the casual case, not as a
+boundary. If a secret must not be readable, the agent should not have a shell.
+
+### Hook dispatch
 
 Between a hook-dispatch regression and its detection, calls not covered by
 `permissions.deny` run unenforced. On the CLI seam this window cannot be closed — only
