@@ -55,6 +55,7 @@ from demos.demo_2.model import credential_hint, init_model, load_env_file
 
 HERE = Path(__file__).parent
 PROMPT_PATH = HERE / "prompts" / "system_prompt.md"
+NAIVE_PROMPT_PATH = HERE / "prompts" / "system_prompt_naive.md"
 POISONED_FIXTURE = HERE / "fixtures" / "poisoned_issue.json"
 
 DEFAULT_REPO = "Agentic-AI-Risk-Mitigation/Janus"
@@ -80,12 +81,14 @@ class UnguardedIssueExplainer:
         model: str,
         verbose: bool = False,
         api_base: str | None = None,
+        naive_prompt: bool = False,
     ):
         self.lc_tools = build_langchain_tools()
         self.verbose = verbose
         self.tool_calls: list[str] = []
 
-        system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
+        prompt_path = NAIVE_PROMPT_PATH if naive_prompt else PROMPT_PATH
+        system_prompt = prompt_path.read_text(encoding="utf-8")
         llm = _init_chat_model(model, api_base=api_base)
 
         if _has_create_agent():
@@ -245,6 +248,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Read the issue from the poisoned fixture instead of GitHub.",
     )
     parser.add_argument(
+        "--naive-prompt",
+        action="store_true",
+        help="Use a realistic developer prompt with no anti-injection hardening.",
+    )
+    parser.add_argument(
         "--prove-no-janus",
         action="store_true",
         help="Assert no Janus module loads in this agent's import chain, and exit.",
@@ -290,7 +298,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\n{'=' * 72}")
     print("UNGUARDED — no Janus, no policy, nothing between model and tools")
     print(f"{'=' * 72}")
-    agent = UnguardedIssueExplainer(model=args.model, verbose=args.verbose, api_base=args.api_base)
+    agent = UnguardedIssueExplainer(
+        model=args.model,
+        verbose=args.verbose,
+        api_base=args.api_base,
+        naive_prompt=args.naive_prompt,
+    )
     print(f"Model: {args.model}")
     print(f"Tools bound (all callable): {', '.join(agent.list_tools())}\n")
 

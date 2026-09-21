@@ -54,6 +54,7 @@ from janus.exceptions import PolicyViolation
 HERE = Path(__file__).parent
 POLICY_PATH = HERE / "policies" / "issue_reader_policy.json"
 PROMPT_PATH = HERE / "prompts" / "system_prompt.md"
+NAIVE_PROMPT_PATH = HERE / "prompts" / "system_prompt_naive.md"
 POISONED_FIXTURE = HERE / "fixtures" / "poisoned_issue.json"
 
 DEFAULT_REPO = "Agentic-AI-Risk-Mitigation/Janus"
@@ -135,6 +136,7 @@ class IssueExplainer:
         model: str,
         verbose: bool,
         api_base: str | None = None,
+        naive_prompt: bool = False,
     ):
         from janus.adapters.langchain import secure_langchain_tools
 
@@ -142,7 +144,8 @@ class IssueExplainer:
         self.verbose = verbose
         self.tool_calls: list[str] = []
 
-        system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
+        prompt_path = NAIVE_PROMPT_PATH if naive_prompt else PROMPT_PATH
+        system_prompt = prompt_path.read_text(encoding="utf-8")
         llm = _init_chat_model(model, api_base=api_base)
 
         if _has_create_agent():
@@ -230,6 +233,7 @@ def build_agent(
     model: str,
     verbose: bool,
     api_base: str | None = None,
+    naive_prompt: bool = False,
 ) -> IssueExplainer:
     """
     Build the agent, with or without Janus enforcement.
@@ -237,7 +241,13 @@ def build_agent(
     ``policy=None`` produces the unprotected comparison agent: the same model
     and the same tools, with no enforcement layer in front of them.
     """
-    return IssueExplainer(policy=policy, model=model, verbose=verbose, api_base=api_base)
+    return IssueExplainer(
+        policy=policy,
+        model=model,
+        verbose=verbose,
+        api_base=api_base,
+        naive_prompt=naive_prompt,
+    )
 
 
 def explain_issue(agent: IssueExplainer, owner: str, repo: str, issue_number: int) -> str:
@@ -379,6 +389,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Read the issue from the poisoned fixture instead of GitHub.",
     )
     parser.add_argument(
+        "--naive-prompt",
+        action="store_true",
+        help="Use a realistic developer prompt with no anti-injection hardening.",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="Exercise the policy against the enforcer and exit. No LLM, no network.",
@@ -423,7 +438,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.mode in ("unprotected", "both"):
         _banner("UNPROTECTED — no Janus enforcement")
         agent = build_agent(
-            policy=None, model=args.model, verbose=args.verbose, api_base=args.api_base
+            policy=None,
+            model=args.model,
+            verbose=args.verbose,
+            api_base=args.api_base,
+            naive_prompt=args.naive_prompt,
         )
         print(explain_issue(agent, owner, repo, issue_number))
 
@@ -432,7 +451,11 @@ def main(argv: list[str] | None = None) -> int:
         _banner(f"PROTECTED — Janus enforcing ({scope})")
         enforcer = load_policy(owner, repo, issue_number, pin_repo=args.pin_repo)
         agent = build_agent(
-            policy=enforcer, model=args.model, verbose=args.verbose, api_base=args.api_base
+            policy=enforcer,
+            model=args.model,
+            verbose=args.verbose,
+            api_base=args.api_base,
+            naive_prompt=args.naive_prompt,
         )
         print(explain_issue(agent, owner, repo, issue_number))
 
