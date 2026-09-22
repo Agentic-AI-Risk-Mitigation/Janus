@@ -11,6 +11,11 @@ is about. One has no security layer. The other has Janus.
 Both bind the *same three functions* from `github_api.py`, so any difference in
 behaviour comes from the enforcement layer alone, not from the tools differing.
 
+> **[INJECTION_REPORT.md](INJECTION_REPORT.md)** — the full write-up: how the
+> injection is built and why an earlier version never fired, what six models did
+> when tested against it, and the runs where a model was successfully hijacked
+> and Janus refused the write anyway.
+
 ---
 
 ## Part 1 — the unguarded agent
