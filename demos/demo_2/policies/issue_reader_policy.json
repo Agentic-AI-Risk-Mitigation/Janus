@@ -1,0 +1,46 @@
+{
+  "fetch_github_issue": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {
+        "owner": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$"
+        },
+        "repo": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]{1,100}$"
+        },
+        "issue_number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999999
+        }
+      },
+      "fallback": 0
+    }
+  ],
+  "fetch_issue_comments": [
+    {
+      "priority": 1,
+      "effect": 0,
+      "conditions": {
+        "owner": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$"
+        },
+        "repo": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]{1,100}$"
+        },
+        "issue_number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999999
+        }
+      },
+      "fallback": 0
+    }
+  ]
+}
