@@ -16,6 +16,27 @@ behaviour comes from the enforcement layer alone, not from the tools differing.
 > when tested against it, and the runs where a model was successfully hijacked
 > and Janus refused the write anyway.
 
+## Showing this to an audience
+
+```bash
+python -m demos.demo_2.demo                  # live
+python -m demos.demo_2.demo --scripted       # no network, no API key
+```
+
+`demo.py` runs both agents back to back against the same poisoned issue and
+narrates the result — the attack, the tool-call trace, the breach, then the same
+model hijacked again and refused by the policy. It pauses between acts for
+narration (`--no-pause` to disable) and colours the trace.
+
+Two things it handles for you when presenting:
+
+- **The injection is probabilistic.** Act 1 retries (`--retries`, default 3)
+  until it lands, and says on screen when it is retrying. If it never lands, it
+  says so rather than pretending.
+- **The network may not cooperate.** `--scripted` replays a fixed transcript
+  through the real tools, the real policy and the real enforcement path with no
+  model call at all. Only the model is replaced, and it always lands.
+
 ---
 
 ## Part 1 — the unguarded agent
