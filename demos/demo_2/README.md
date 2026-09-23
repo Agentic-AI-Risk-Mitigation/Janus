@@ -23,6 +23,10 @@ python -m demos.demo_2.demo                  # live
 python -m demos.demo_2.demo --scripted       # no network, no API key
 ```
 
+**[PRESENTER_SCRIPT.md](PRESENTER_SCRIPT.md)** — what to say, beat by beat: a
+pre-flight checklist, the words for each act, what to do if the injection does
+not land on stage, and answers to the questions that usually come up.
+
 `demo.py` runs both agents back to back against the same poisoned issue and
 narrates the result — the attack, the tool-call trace, the breach, then the same
 model hijacked again and refused by the policy. It pauses between acts for
