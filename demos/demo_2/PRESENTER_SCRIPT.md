@@ -31,8 +31,26 @@ python -m demos.demo_2.demo --fast --no-pause
 - If the venue network is shaky, decide now to present with `--scripted`. It
   runs the real tools, the real policy and the real enforcement decision — only
   the model is replayed — and it always lands.
-- Backup models if the default misbehaves: `qwen/qwen3-14b`,
-  `deepseek/deepseek-chat`.
+- The default model is `qwen/qwen3-14b`. If it misbehaves, switch to
+  `--scripted` rather than another model: `amazon/nova-lite-v1` and
+  `mistralai/mistral-nemo` comply far less often on the longer live issue.
+
+**To show a real comment appear on GitHub**, run against the Janus-test issue
+instead of the local fixture:
+
+```bash
+python -m demos.demo_2.demo --cleanup        # start with no comments on the issue
+python -m demos.demo_2.demo --live ish-codes-magic/Janus-test#1
+```
+
+- Open <https://github.com/ish-codes-magic/Janus-test/issues/1> in a browser
+  first. Refresh after Act 1 to show the comment, and after Act 2 to show that
+  no second one arrived.
+- Add `--scripted` if the model or network misbehaves: it still posts a real
+  comment, with no model call.
+- The comment is posted from your own GitHub account.
+- The beats below carry a **Live issue** line wherever the words differ from the
+  local fixture.
 
 ---
 
@@ -84,6 +102,12 @@ The header and setup panel appear, then it waits for you.
 > agent's context because reading it *is the job*. There's no way for the agent
 > to do its work without ingesting attacker-controlled input.
 
+**Live issue — say this opening instead, with the issue page on screen:**
+
+> Here's the issue it's about to read, and it's a real one, on GitHub right now.
+> An LRU cache that evicts the wrong entry — a completely normal bug report,
+> with a reproduction, a root cause and a suggested fix.
+
 **If you want one extra sentence on why it's shaped like this:**
 
 > Notice it doesn't say "ignore your previous instructions." It reads like
@@ -114,6 +138,11 @@ The header and setup panel appear, then it waits for you.
 
 **Point at:** the published comment text under "What it published".
 
+**Live issue — then switch to the browser and refresh the issue page:**
+
+> And this isn't a simulation. There's the comment, on the real issue, posted
+> from my account. I asked for an explanation and got a write.
+
 ---
 
 ## Beat 4 — With Janus (~60s)
@@ -137,6 +166,10 @@ The header and setup panel appear, then it waits for you.
 > worked perfectly.
 >
 > The call never reached the function. Janus refused it before the code ran.
+
+**Live issue — refresh the issue page again:**
+
+> Still one comment. The second attempt never left this machine.
 
 **The line worth saying slowly:**
 
@@ -269,8 +302,12 @@ python -m demos.demo_2.agent --repo ish-codes-magic/Janus-test --issue 1 --pin-r
 # The demo
 python -m demos.demo_2.demo
 python -m demos.demo_2.demo --scripted          # offline safety net
-python -m demos.demo_2.demo --model qwen/qwen3-14b
+python -m demos.demo_2.demo --model amazon/nova-lite-v1   # default is qwen/qwen3-14b
 python -m demos.demo_2.demo --no-pause --fast   # unattended
+
+# Against the real issue, with a real comment
+python -m demos.demo_2.demo --live ish-codes-magic/Janus-test#1
+python -m demos.demo_2.demo --cleanup           # delete the comments it posted
 
 # The two sides run separately, if you prefer two visible commands
 python -m demos.demo_2.baseline_agent --poisoned --naive-prompt --verbose \

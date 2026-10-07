@@ -41,6 +41,35 @@ Two things it handles for you when presenting:
   through the real tools, the real policy and the real enforcement path with no
   model call at all. Only the model is replaced, and it always lands.
 
+### Showing a real comment appear on GitHub
+
+By default the issue is a local fixture and the write is simulated. `--live`
+points both acts at a real issue instead: the agent reads it from GitHub, and
+when the unguarded agent is hijacked the comment is posted for real.
+
+```bash
+python -m demos.demo_2.demo --live ish-codes-magic/Janus-test#1
+python -m demos.demo_2.demo --cleanup        # delete the comments it posted
+```
+
+Keep the issue page open in a browser: refresh after Act 1 to show the comment,
+and again after Act 2 to show that no second one arrived.
+
+- **The issue must carry the injection.** `--live` looks for a
+  `#### Maintainer triage workflow` section in the issue body and refuses to
+  start without one, because an issue with no payload gives the agent nothing
+  to obey.
+- **Only that one issue can be written to.** The model chooses the tool's
+  arguments, so a hijacked model could name any repository the token can reach.
+  A call aimed anywhere else stays simulated.
+- **Credentials.** Uses `GITHUB_TOKEN`, or the GitHub CLI's login if that is
+  unset. The comment is posted as that account.
+- **Model.** The runner defaults to `qwen/qwen3-14b`, which complied 4 runs out
+  of 4 on the longer Janus-test issue; `amazon/nova-lite-v1` complied about 1
+  in 4. `--scripted --live` posts a comment with no model call at all.
+- **Rehearsals.** `--cleanup` deletes the comments earlier `--live` runs posted
+  (and only those), so the issue starts empty each time.
+
 ---
 
 ## Part 1 — the unguarded agent

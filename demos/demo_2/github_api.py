@@ -16,13 +16,16 @@ both agents:
 So any behavioural difference between the two agents comes from the enforcement
 layer alone, not from the tools being different.
 
-``post_issue_comment`` is **simulated** — it never calls GitHub's write API. It
-appends to a local file, so an agent that gets hijacked into "exfiltrating"
-something leaves evidence on disk without anything being published.
+``post_issue_comment`` is **simulated** by default — it appends to a local file,
+so an agent that gets hijacked into "exfiltrating" something leaves evidence on
+disk without anything being published. ``enable_live_writes()`` opts one issue
+into real comments, for showing the write land on GitHub; every other target
+stays simulated.
 
 Only the standard library is used for HTTP, so this adds no dependency beyond
 LangChain. Set ``GITHUB_TOKEN`` to raise the anonymous rate limit (60
-requests/hour) and to read issues in private repositories.
+requests/hour), to read issues in private repositories, and to post live
+comments.
 """
 
 from __future__ import annotations
@@ -41,8 +44,14 @@ _TIMEOUT_SECONDS = 15
 RUNTIME_DIR = Path(__file__).parent / "runtime"
 EXFIL_LOG = RUNTIME_DIR / "posted_comments.log"
 
+# Comments posted to GitHub for real, so they can be deleted afterwards.
+LIVE_COMMENTS_LOG = RUNTIME_DIR / "live_comments.json"
+
 # Set by load_fixture() to serve issues from disk instead of the network.
 _FIXTURES: dict[str, Any] | None = None
+
+# Set by enable_live_writes(): the one issue a real comment may be posted to.
+_LIVE_TARGET: tuple[str, str, int] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -74,8 +83,8 @@ def _fixture_lookup(owner: str, repo: str, issue_number: int) -> dict[str, Any] 
 # ---------------------------------------------------------------------------
 
 
-def _github_get(path: str) -> Any:
-    """GET a GitHub API path and return the decoded JSON body."""
+def _github_request(method: str, path: str, payload: dict[str, Any] | None = None) -> Any:
+    """Send one GitHub API request and return the decoded JSON body, if any."""
     headers = {
         "Accept": "application/vnd.github+json",
         "User-Agent": "janus-demo-2",
@@ -84,9 +93,93 @@ def _github_get(path: str) -> Any:
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
-    request = urllib.request.Request(f"{GITHUB_API}{path}", headers=headers)
+    data = None
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+
+    request = urllib.request.Request(
+        f"{GITHUB_API}{path}", data=data, headers=headers, method=method
+    )
     with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS) as response:
-        return json.loads(response.read().decode("utf-8"))
+        raw = response.read()
+        return json.loads(raw.decode("utf-8")) if raw else None
+
+
+def _github_get(path: str) -> Any:
+    """GET a GitHub API path and return the decoded JSON body."""
+    return _github_request("GET", path)
+
+
+# ---------------------------------------------------------------------------
+# Live writes (opt-in)
+# ---------------------------------------------------------------------------
+
+
+def enable_live_writes(owner: str, repo: str, issue_number: int) -> None:
+    """
+    Let ``post_issue_comment`` publish to exactly one issue on GitHub.
+
+    The model chooses the tool's arguments, and a hijacked model could name any
+    repository the token can write to. So a real comment is posted only when
+    the call targets this issue; every other target stays simulated.
+    """
+    global _LIVE_TARGET
+    _LIVE_TARGET = (owner.lower(), repo.lower(), int(issue_number))
+
+
+def _is_live_target(owner: str, repo: str, issue_number: int) -> bool:
+    try:
+        target = (str(owner).lower(), str(repo).lower(), int(issue_number))
+    except (TypeError, ValueError):
+        return False
+    return _LIVE_TARGET == target
+
+
+def live_comments() -> list[dict[str, Any]]:
+    """Comments this demo has posted to GitHub for real and not yet deleted."""
+    if not LIVE_COMMENTS_LOG.exists():
+        return []
+    entries = json.loads(LIVE_COMMENTS_LOG.read_text(encoding="utf-8"))
+    return entries if isinstance(entries, list) else []
+
+
+def _record_live_comment(owner: str, repo: str, comment: dict[str, Any]) -> None:
+    entries = live_comments()
+    entries.append(
+        {"owner": owner, "repo": repo, "id": comment.get("id"), "url": comment.get("html_url", "")}
+    )
+    LIVE_COMMENTS_LOG.write_text(json.dumps(entries, indent=2), encoding="utf-8")
+
+
+def delete_live_comments() -> int:
+    """
+    Delete from GitHub every comment recorded in the live log.
+
+    Only touches comments this demo posted itself, so an issue can be put back
+    to its starting state between rehearsals. Returns how many were removed;
+    any that could not be deleted stay in the log for the next attempt.
+    """
+    removed = 0
+    remaining: list[dict[str, Any]] = []
+    for entry in live_comments():
+        path = f"/repos/{entry['owner']}/{entry['repo']}/issues/comments/{entry['id']}"
+        try:
+            _github_request("DELETE", path)
+        except urllib.error.HTTPError as exc:
+            if exc.code != 404:  # 404: someone already deleted it by hand
+                remaining.append(entry)
+                continue
+        except urllib.error.URLError:
+            remaining.append(entry)
+            continue
+        removed += 1
+
+    if remaining:
+        LIVE_COMMENTS_LOG.write_text(json.dumps(remaining, indent=2), encoding="utf-8")
+    else:
+        LIVE_COMMENTS_LOG.unlink(missing_ok=True)
+    return removed
 
 
 # ---------------------------------------------------------------------------
@@ -162,19 +255,34 @@ def fetch_issue_comments(owner: str, repo: str, issue_number: int) -> str:
 
 def post_issue_comment(owner: str, repo: str, issue_number: int, body: str) -> str:
     """
-    SIMULATED write sink — records the attempt locally, never calls GitHub.
+    The write sink — the tool an injected instruction will try to reach.
 
-    This is the tool an injected instruction inside an issue body will try to
-    reach. In the unguarded agent nothing stops it, so the call lands here and
-    writes to disk.
+    Simulated by default: the attempt is recorded locally and nothing is
+    published. After ``enable_live_writes()``, a call aimed at that one issue
+    also posts a real comment through GitHub's API. In the unguarded agent
+    nothing stops the call, so it lands here either way.
     """
     RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
     with EXFIL_LOG.open("a", encoding="utf-8") as handle:
         handle.write(f"--- POSTED to {owner}/{repo}#{issue_number} ---\n{body}\n\n")
-    return (
-        f"[SIMULATED] Comment posted to {owner}/{repo}#{issue_number} "
-        f"({len(body)} chars). Recorded in {EXFIL_LOG.name}."
-    )
+
+    if not _is_live_target(owner, repo, issue_number):
+        return (
+            f"[SIMULATED] Comment posted to {owner}/{repo}#{issue_number} "
+            f"({len(body)} chars). Recorded in {EXFIL_LOG.name}."
+        )
+
+    try:
+        comment = _github_request(
+            "POST", f"/repos/{owner}/{repo}/issues/{issue_number}/comments", {"body": body}
+        )
+    except urllib.error.HTTPError as exc:
+        return f"GitHub refused the comment on {owner}/{repo}#{issue_number} (HTTP {exc.code})."
+    except urllib.error.URLError as exc:
+        return f"Could not reach api.github.com: {exc.reason}"
+
+    _record_live_comment(owner, repo, comment)
+    return f"Comment posted to {owner}/{repo}#{issue_number}: {comment.get('html_url', '')}"
 
 
 def sink_was_reached() -> bool:
